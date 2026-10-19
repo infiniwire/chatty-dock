@@ -26,6 +26,51 @@ function setup() {
   return { backend, controller, prepare, canInstall };
 }
 describe('automatic update lifecycle', () => {
+  it('keeps bounded plain-text release notes and check time through download and waiting', () => {
+    const { backend, controller, canInstall } = setup();
+    canInstall.mockReturnValue(false);
+    backend.emit('update-available', {
+      version: '0.3.0',
+      releaseDate: '2026-10-19T08:00:00Z',
+      releaseNotes: [
+        {
+          version: '0.3.0',
+          note: '<p>Better &amp; safer.</p><script>doNotRun()</script>' + 'x'.repeat(6000),
+        },
+      ],
+    });
+    const notes = controller.state.releaseNotes;
+    const checkedAt = controller.state.checkedAt;
+    expect(controller.state.version).toBe('0.3.0');
+    expect(controller.state.releaseDate).toBe('2026-10-19T08:00:00.000Z');
+    expect(checkedAt).toBeGreaterThan(0);
+    expect(notes).toContain('Better & safer.');
+    expect(notes).not.toMatch(/<script|doNotRun|<p>/);
+    expect(notes!.length).toBeLessThanOrEqual(4000);
+    backend.emit('download-progress', { percent: 42 });
+    backend.emit('update-downloaded', { version: '0.3.0' });
+    expect(controller.state.stage).toBe('waiting');
+    expect(controller.state.releaseNotes).toBe(notes);
+    expect(controller.state.checkedAt).toBe(checkedAt);
+  });
+  it('records successful checks but does not label a failed check as current', () => {
+    const { backend, controller } = setup();
+    backend.emit('update-not-available', {
+      version: '0.2.0',
+      releaseDate: 'invalid',
+      releaseNotes: null,
+    });
+    expect(controller.state.stage).toBe('current');
+    expect(controller.state.version).toBe('0.2.0');
+    expect(controller.state.releaseDate).toBeUndefined();
+    const checkedAt = controller.state.checkedAt;
+    backend.emit('checking-for-update');
+    backend.emit('error', new Error('secret-token'));
+    expect(controller.state.stage).toBe('error');
+    expect(controller.state.checkedAt).toBe(checkedAt);
+    expect(controller.state.version).toBeUndefined();
+    expect(JSON.stringify(controller.state)).not.toContain('secret-token');
+  });
   it('downloads stable updates, flushes state, installs silently and forces relaunch', async () => {
     const { backend, controller, prepare } = setup();
     expect(backend.autoDownload).toBe(true);

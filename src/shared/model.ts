@@ -34,6 +34,19 @@ export type Panel =
 export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot') }),
   z.object({
+    type: z.literal('profile-menu'),
+    action: z.enum(['open', 'close']),
+    restoreFocus: z.boolean().optional(),
+    anchor: z
+      .object({
+        x: z.number().finite().min(-16000).max(16000),
+        y: z.number().finite().min(-16000).max(16000),
+        width: z.number().finite().positive().max(16000),
+        height: z.number().finite().positive().max(16000),
+      })
+      .optional(),
+  }),
+  z.object({
     type: z.literal('panel'),
     panel: z.enum(['none', 'new', 'profiles', 'downloads', 'settings', 'about', 'diagnostics']),
   }),
@@ -74,6 +87,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('clear-downloads') }),
   z.object({ type: z.literal('diagnostics') }),
   z.object({ type: z.literal('updates') }),
+  z.object({ type: z.literal('project-page'), page: z.enum(['releases', 'repository']) }),
   z.object({ type: z.literal('update-token'), token: z.string().trim().max(512) }),
 ]);
 export type Command = z.infer<typeof commandSchema>;
@@ -105,6 +119,9 @@ export type UpdateState = {
     | 'development';
   message: string;
   version?: string;
+  checkedAt?: number;
+  releaseDate?: string;
+  releaseNotes?: string;
   percent?: number;
   credentialSource?: 'saved' | 'environment' | 'github-cli';
 };
@@ -112,6 +129,7 @@ export type Snapshot = {
   settings: Settings;
   profileId: string;
   panel: Panel;
+  profileMenuOpen: boolean;
   title: string;
   typography: { fontSize: number; toolbarHeight: number };
   loading: boolean;

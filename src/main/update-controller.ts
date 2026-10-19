@@ -1,5 +1,61 @@
 import type { UpdateState } from '../shared/model';
 
+type ReleaseDetails = {
+  version?: string;
+  releaseDate?: string;
+  releaseNotes?: string | Array<{ version?: string; note?: string }> | null;
+};
+
+// Release descriptions are untrusted text. Bound their size and discard HTML;
+// the renderer displays the result as text, never as executable markup.
+function releaseDetails(
+  info: ReleaseDetails = {},
+): Pick<UpdateState, 'version' | 'releaseDate' | 'releaseNotes'> {
+  const details: Pick<UpdateState, 'version' | 'releaseDate' | 'releaseNotes'> = {};
+  if (
+    typeof info.version === 'string' &&
+    info.version.length <= 64 &&
+    /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(info.version)
+  )
+    details.version = info.version;
+  if (
+    typeof info.releaseDate === 'string' &&
+    info.releaseDate.length <= 80 &&
+    Number.isFinite(Date.parse(info.releaseDate))
+  )
+    details.releaseDate = new Date(info.releaseDate).toISOString();
+  const raw =
+    typeof info.releaseNotes === 'string'
+      ? info.releaseNotes
+      : Array.isArray(info.releaseNotes)
+        ? info.releaseNotes
+            .slice(0, 6)
+            .filter((item) => item && typeof item.note === 'string')
+            .map(
+              (item) =>
+                `${typeof item.version === 'string' ? item.version.slice(0, 64) + '\n' : ''}${item.note!.slice(0, 8000)}`,
+            )
+            .join('\n\n')
+        : '';
+  const notes = raw
+    .slice(0, 16000)
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?\s*>|<\/(?:p|li|h[1-6]|div)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(
+      /&(?:nbsp|amp|lt|gt|quot|apos);/g,
+      (entity) =>
+        ({ '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" })[
+          entity
+        ] ?? entity,
+    )
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 4000);
+  if (notes) details.releaseNotes = notes;
+  return details;
+}
+
 export interface UpdateBackend {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
@@ -38,14 +94,20 @@ export class UpdateController {
     backend.on('checking-for-update', () =>
       this.set({ stage: 'checking', message: 'Checking GitHub Releases…' }),
     );
-    backend.on('update-not-available', () =>
-      this.set({ stage: 'current', message: 'You are running the latest release.' }),
-    );
-    backend.on('update-available', (info: { version: string }) =>
+    backend.on('update-not-available', (info: ReleaseDetails = {}) =>
       this.set({
+        ...releaseDetails(info),
+        stage: 'current',
+        message: 'You are running the latest release.',
+        checkedAt: Date.now(),
+      }),
+    );
+    backend.on('update-available', (info: ReleaseDetails) =>
+      this.set({
+        ...releaseDetails(info),
         stage: 'downloading',
         message: 'Downloading update in the background…',
-        version: info.version,
+        checkedAt: Date.now(),
         percent: 0,
       }),
     );
@@ -56,12 +118,13 @@ export class UpdateController {
         percent: Math.max(0, Math.min(100, info.percent)),
       }),
     );
-    backend.on('update-downloaded', (info: { version: string }) => {
+    backend.on('update-downloaded', (info: ReleaseDetails) => {
       this.downloaded = true;
       this.set({
+        ...this.state,
+        ...releaseDetails(info),
         stage: 'waiting',
         message: 'Update verified. Waiting for file downloads before restarting…',
-        version: info.version,
         percent: 100,
       });
       void this.maybeInstall();
@@ -72,6 +135,7 @@ export class UpdateController {
     this.state = {
       ...state,
       credentialSource: state.credentialSource ?? this.state.credentialSource,
+      checkedAt: state.checkedAt ?? this.state.checkedAt,
     };
     this.changed();
   }

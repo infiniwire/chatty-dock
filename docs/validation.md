@@ -2,7 +2,7 @@
 
 This file records verification boundaries. The current commit, CI jobs, and generated test evidence are authoritative; a build configuration alone does not prove a successful build.
 
-ChattyDock 0.2.0 includes startup automatic updates; see [automatic update verification](automatic-updates.md) for the additional scope. Windows CI exercises a real installation and update between two isolated test-product versions, including silent installation, automatic relaunch and preservation of the profile ID.
+ChattyDock 0.2.1 includes startup automatic updates; see [automatic update verification](automatic-updates.md) for the additional scope. Windows CI exercises a real installation and update between two isolated test-product versions, including silent installation, automatic relaunch and preservation of the profile ID.
 
 Navigation fixture scenarios exercise same-window links, new-window links, scripted assignment/replacement, form submission, server redirects, initial and reused popups, and direct `loadURL`. The test stubs Electron's `shell.openExternal` at the OS boundary and verifies each expected dispatch, unchanged safe container URLs, zero requests to a blocked external server, and working third-party subresources. It does not launch a real system browser or certify real account sign-in.
 
@@ -11,8 +11,8 @@ Navigation fixture scenarios exercise same-window links, new-window links, scrip
 The implementation was exercised on Windows x64 with Electron 44.9.0. The local developer shell used Node.js 22.13.1; repository configuration and CI pin Node.js 22.23.3. Both satisfy the declared engine range.
 
 - ESLint and strict TypeScript checks passed.
-- The unit suite contains 34 cases for navigation, filename handling, command validation, bounds restoration, persistence, update lifecycle and release metadata.
-- The real Electron suite contains 17 Windows scenarios and 16 Mac scenarios, including per-window font detection, website zoom, and session persistence across a full restart. Windows has one additional OS-encrypted credential case.
+- The unit suite contains 36 cases for navigation, filename handling, command validation, bounds restoration, persistence, update lifecycle and bounded plain-text release metadata.
+- The real Electron suite contains 24 Windows scenarios and 23 Mac scenarios, including per-window font detection, website zoom, downloads UI and file actions, shared/isolated window creation, native toolbar profile dropdowns, profile menus and inline editing, settings categories, About/version/update presentation, keyboard return and focus restoration, light/dark layouts, and session persistence across a full restart. Windows has one additional OS-encrypted credential case exercised through the settings form. UI captures are saved in `artifacts/ui-review/`, `artifacts/ui-round2/`, `artifacts/about/` and `artifacts/profile-dropdown/`. About's download/release-note presentation uses a synthetic renderer snapshot; actual update event handling is unit-tested, and real installation remains the separate updater installation test.
 - Each native release job repeats integration scenarios against the packaged executable.
 - `npm run test:dev` checks the actual electron-vite development command and local React interaction.
 - Native release jobs generate a Windows NSIS installer and Intel/Apple Silicon Mac DMG/ZIP packages, with English application metadata.

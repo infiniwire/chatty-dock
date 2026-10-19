@@ -73,6 +73,22 @@ it('restores disconnected-monitor windows inside the available display', () => {
   ).toEqual({ x: 0, y: 0, width: 1280, height: 720 });
 });
 it('rejects malformed privileged commands', () => {
+  for (const invalid of [NaN, Infinity, 16001]) {
+    expect(
+      commandSchema.safeParse({
+        type: 'profile-menu',
+        action: 'open',
+        anchor: { x: invalid, y: 0, width: 140, height: 34 },
+      }).success,
+    ).toBe(false);
+  }
+  expect(
+    commandSchema.safeParse({ type: 'profile-menu', action: 'close', restoreFocus: true }).success,
+  ).toBe(true);
+  expect(
+    commandSchema.safeParse({ type: 'project-page', page: 'https://example.com' }).success,
+  ).toBe(false);
+  expect(commandSchema.safeParse({ type: 'project-page', page: 'releases' }).success).toBe(true);
   expect(commandSchema.safeParse({ type: 'profile-switch', id: '../../profile' }).success).toBe(
     false,
   );

@@ -50,6 +50,7 @@ type WindowEntry = {
   title: string;
   fontSize: number;
   typography?: ChatTypography;
+  profileMenu?: BrowserWindow;
 };
 const windows = new Map<number, WindowEntry>();
 const retired = new Map<number, WebContentsView>();
@@ -75,7 +76,10 @@ function requireProfile(id: string): void {
 }
 function focused(): WindowEntry | undefined {
   const window = BrowserWindow.getFocusedWindow();
-  return window ? windows.get(window.id) : windows.values().next().value;
+  return window
+    ? (windows.get(window.id) ??
+        [...windows.values()].find((entry) => entry.profileMenu === window))
+    : windows.values().next().value;
 }
 function emit(entry: WindowEntry): void {
   if (entry.win.isDestroyed() || entry.win.webContents.isLoadingMainFrame()) return;
@@ -84,6 +88,7 @@ function emit(entry: WindowEntry): void {
     settings: store.settings,
     profileId: entry.profileId,
     panel: entry.panel,
+    profileMenuOpen: !!entry.profileMenu && !entry.profileMenu.isDestroyed(),
     title: entry.title,
     typography: { fontSize: entry.fontSize, toolbarHeight: toolbarHeight(entry.fontSize) },
     loading: entry.loading,
@@ -97,6 +102,12 @@ function emit(entry: WindowEntry): void {
     update: updates?.state ?? { stage: 'idle', message: 'Starting update service…' },
   };
   entry.win.webContents.send('dock:state', snapshot);
+  if (
+    entry.profileMenu &&
+    !entry.profileMenu.isDestroyed() &&
+    !entry.profileMenu.webContents.isLoadingMainFrame()
+  )
+    entry.profileMenu.webContents.send('dock:state', snapshot);
   entry.win.setTitle(
     `ChattyDock — ${store.settings.profiles.find((p) => p.id === entry.profileId)?.name ?? 'Profile'}`,
   );
@@ -122,6 +133,120 @@ async function openExternal(raw: string): Promise<void> {
   if (!['content', 'auth', 'external'].includes(urlKind(raw, fixture)))
     throw new Error('This link cannot be opened.');
   await shell.openExternal(raw);
+}
+function closeProfileMenu(entry: WindowEntry, focus?: 'trigger' | 'parent'): void {
+  const menu = entry.profileMenu;
+  if (!menu || menu.isDestroyed()) return;
+  entry.profileMenu = undefined;
+  menu.close();
+  emit(entry);
+  if (focus && !entry.win.isDestroyed()) {
+    entry.win.focus();
+    if (focus === 'trigger') {
+      entry.win.webContents.focus();
+      void entry.win.webContents
+        .executeJavaScript('document.querySelector("[data-profile-trigger]")?.focus()')
+        .catch(() => {});
+    } else if (entry.panel === 'none') entry.view.webContents.focus();
+    else entry.win.webContents.focus();
+  }
+}
+async function openProfileMenu(
+  entry: WindowEntry,
+  anchor: { x: number; y: number; width: number; height: number },
+): Promise<void> {
+  closeProfileMenu(entry);
+  const zoom = entry.win.webContents.getZoomFactor();
+  const content = entry.win.getContentBounds();
+  const work = screen.getDisplayMatching(entry.win.getBounds()).workArea;
+  const width = Math.min(Math.round(272 * zoom), work.width - 16);
+  const desiredHeight = Math.round((100 + Math.min(7, store.settings.profiles.length) * 46) * zoom);
+  const bottom = Math.round(content.y + (anchor.y + anchor.height) * zoom + 7);
+  const height = Math.min(desiredHeight, work.height - 16);
+  const x = Math.max(
+    work.x + 8,
+    Math.min(
+      Math.round(content.x + (anchor.x + anchor.width) * zoom - width),
+      work.x + work.width - width - 8,
+    ),
+  );
+  const y = Math.max(
+    work.y + 8,
+    Math.min(
+      bottom + height <= work.y + work.height - 8
+        ? bottom
+        : content.y + anchor.y * zoom - height - 7,
+      work.y + work.height - height - 8,
+    ),
+  );
+  // A child window is required: CSS popovers cannot draw over a native WebContentsView.
+  const menu = new BrowserWindow({
+    parent: entry.win,
+    x,
+    y: Math.round(y),
+    width,
+    height,
+    frame: false,
+    show: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
+  });
+  entry.profileMenu = menu;
+  menu.setMenu(null);
+  menu.webContents.setZoomFactor(zoom);
+  menu.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  menu.webContents.on('will-navigate', (event) => event.preventDefault());
+  menu.webContents.on('will-redirect', (event) => event.preventDefault());
+  menu.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  menu.webContents.on('did-finish-load', () => emit(entry));
+  let blurTimer: ReturnType<typeof setTimeout> | undefined;
+  menu.on('blur', () => {
+    // Let a click on the parent trigger close the menu before processing blur.
+    if (blurTimer) clearTimeout(blurTimer);
+    blurTimer = setTimeout(() => {
+      if (entry.profileMenu === menu && !menu.isFocused()) closeProfileMenu(entry);
+    }, 120);
+  });
+  menu.on('closed', () => {
+    if (blurTimer) clearTimeout(blurTimer);
+    if (entry.profileMenu === menu) {
+      entry.profileMenu = undefined;
+      emit(entry);
+    }
+  });
+  menu.once('ready-to-show', () => {
+    if (entry.profileMenu !== menu || entry.win.isDestroyed()) {
+      menu.close();
+      return;
+    }
+    menu.show();
+    menu.focus();
+    emit(entry);
+  });
+  try {
+    const url = new URL(devOrigin || `${uiOrigin}/index.html`);
+    url.searchParams.set('surface', 'profile-menu');
+    await menu.loadURL(url.href);
+  } catch (error) {
+    if (entry.profileMenu === menu) closeProfileMenu(entry);
+    throw error;
+  }
+  emit(entry);
 }
 function configureSession(profileId: string): Session {
   const ses = session.fromPartition(`persist:profile-${profileId}`);
@@ -348,13 +473,18 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.on('did-finish-load', () => emit(entry));
   win.on('resize', () => {
+    closeProfileMenu(entry);
     resize(entry);
     saveWindow(entry);
   });
-  win.on('move', () => saveWindow(entry));
+  win.on('move', () => {
+    closeProfileMenu(entry);
+    saveWindow(entry);
+  });
   win.on('maximize', () => saveWindow(entry));
   win.on('unmaximize', () => saveWindow(entry));
   win.on('close', () => {
+    closeProfileMenu(entry);
     if (downloads.hasActive(undefined, win.id)) win.contentView.removeChildView(entry.view);
   });
   win.on('closed', () => {
@@ -383,7 +513,10 @@ function saveWindow(entry: WindowEntry): void {
   store.changed();
 }
 function localSender(event: IpcMainInvokeEvent): WindowEntry | undefined {
-  const entry = [...windows.values()].find((item) => item.win.webContents === event.sender);
+  const entry = [...windows.values()].find(
+    (item) =>
+      item.win.webContents === event.sender || item.profileMenu?.webContents === event.sender,
+  );
   if (!entry || event.senderFrame !== event.sender.mainFrame) return;
   try {
     const url = new URL(event.senderFrame.url);
@@ -398,13 +531,26 @@ function localSender(event: IpcMainInvokeEvent): WindowEntry | undefined {
   }
   return entry;
 }
-async function execute(entry: WindowEntry, command: Command): Promise<unknown> {
+async function execute(
+  entry: WindowEntry,
+  command: Command,
+  fromProfileMenu = false,
+): Promise<unknown> {
   const contents = entry.view.webContents;
   switch (command.type) {
     case 'snapshot':
       emit(entry);
       break;
+    case 'profile-menu':
+      if (command.action === 'close')
+        closeProfileMenu(entry, command.restoreFocus ? 'trigger' : 'parent');
+      else {
+        if (!command.anchor) throw new Error('A menu anchor is required.');
+        await openProfileMenu(entry, command.anchor);
+      }
+      break;
     case 'panel':
+      if (!fromProfileMenu) closeProfileMenu(entry);
       entry.panel = command.panel;
       break;
     case 'new-window':
@@ -559,6 +705,13 @@ async function execute(entry: WindowEntry, command: Command): Promise<unknown> {
       }));
     case 'updates':
       await updates.check();
+      break;
+    case 'project-page':
+      await shell.openExternal(
+        command.page === 'releases'
+          ? 'https://github.com/infiniwire/chatty-dock/releases'
+          : 'https://github.com/infiniwire/chatty-dock',
+      );
       break;
     case 'update-token':
       await updates.saveToken(command.token);
@@ -756,8 +909,25 @@ if (locked)
         if (!entry) return { ok: false, error: 'Untrusted IPC sender.' };
         const parsed = commandSchema.safeParse(raw);
         if (!parsed.success) return { ok: false, error: 'Invalid command.' };
+        if (entry.profileMenu?.webContents === event.sender) {
+          const command = parsed.data;
+          const allowed =
+            command.type === 'snapshot' ||
+            command.type === 'profile-switch' ||
+            (command.type === 'profile-menu' && command.action === 'close') ||
+            (command.type === 'panel' && command.panel === 'profiles');
+          if (!allowed)
+            return { ok: false, error: 'This command is not available in the profile menu.' };
+        }
         try {
-          return { ok: true, value: await execute(entry, parsed.data) };
+          return {
+            ok: true,
+            value: await execute(
+              entry,
+              parsed.data,
+              entry.profileMenu?.webContents === event.sender,
+            ),
+          };
         } catch (error) {
           return {
             ok: false,

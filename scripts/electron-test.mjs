@@ -142,6 +142,80 @@ try {
   const winId = await application.evaluate(
     ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].id,
   );
+  await check('downloads empty state, keyboard return, themes and compact toolbar', async () => {
+    const original = await snapshot(page);
+    const bounds = await application.evaluate(
+      ({ BrowserWindow }, id) => BrowserWindow.fromId(id).getBounds(),
+      winId,
+    );
+    await fs.mkdir(path.join(output, 'ui-review'), { recursive: true });
+    await application.evaluate(
+      ({ BrowserWindow }, id) => BrowserWindow.fromId(id).setSize(1280, 820),
+      winId,
+    );
+    const trigger = page.getByRole('button', { name: 'Downloads', exact: true });
+    await trigger.click();
+    await expect(page.getByRole('heading', { name: 'Downloads', exact: true })).toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('navigation', { name: 'Website navigation' })).toHaveCount(0);
+    await expect(
+      page.getByRole('navigation', { name: 'Panel navigation' }).getByRole('button'),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole('heading', { name: 'Your downloads, all in one place' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clear finished' })).toHaveCount(0);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await command(page, { type: 'settings', theme: 'light' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await page.screenshot({ path: path.join(output, 'ui-review', 'downloads-empty-light.png') });
+    await command(page, { type: 'settings', theme: 'dark' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.screenshot({ path: path.join(output, 'ui-review', 'downloads-empty-dark.png') });
+    await page.getByText('About your downloads', { exact: true }).click();
+    await expect(
+      page.getByText(/Clearing finished entries does not delete your files/),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await application.evaluate(
+      ({ BrowserWindow }, id) => BrowserWindow.fromId(id).setSize(740, 650),
+      winId,
+    );
+    await trigger.click();
+    await expect(page.getByRole('heading', { name: 'Downloads', exact: true })).toBeFocused();
+    const layout = await page.evaluate(() => {
+      const bar = document.querySelector('.topbar');
+      return {
+        overflow: bar.scrollWidth > bar.clientWidth,
+        right: document.querySelector('.settings-button').getBoundingClientRect().right,
+        width: innerWidth,
+      };
+    });
+    expect(layout.overflow).toBe(false);
+    expect(layout.right).toBeLessThanOrEqual(layout.width);
+    await page.screenshot({ path: path.join(output, 'ui-review', 'downloads-compact-dark.png') });
+    await page.getByRole('button', { name: 'Back to chat', exact: true }).click();
+    await expect(trigger).toBeFocused();
+    await expect(
+      page.getByRole('navigation', { name: 'Website navigation' }).getByRole('button'),
+    ).toHaveCount(4);
+    const websiteBefore = await js(id, 'location.href');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(
+      page.getByRole('navigation', { name: 'Panel navigation' }).getByRole('button'),
+    ).toHaveCount(1);
+    await page.getByRole('button', { name: 'Back to chat', exact: true }).click();
+    await expect(page.getByRole('navigation', { name: 'Website navigation' })).toBeVisible();
+    expect(await remote(winId)).toBe(id);
+    expect(await js(id, 'location.href')).toBe(websiteBefore);
+    await command(page, { type: 'settings', theme: original.settings.theme });
+    await application.evaluate(
+      ({ BrowserWindow }, { id, bounds }) => BrowserWindow.fromId(id).setBounds(bounds),
+      { id: winId, bounds },
+    );
+  });
   await check('sandboxed remote view and rejected untrusted IPC', async () => {
     expect(await js(id, '({node:typeof process,bridge:typeof window.dock})')).toEqual({
       node: 'undefined',
@@ -178,6 +252,136 @@ try {
   );
   await js(id, 'localStorage.setItem("sentinel","personal")');
   const other = await command(page, { type: 'profile-create', name: 'Work' });
+  await check(
+    'native profile dropdown themes, keyboard, isolation, dismissal and IPC scope',
+    async () => {
+      const original = await snapshot(page);
+      const trigger = page.getByRole('button', { name: 'Active login profile' });
+      const isMenu = (candidate) =>
+        candidate.url().includes('surface=profile-menu') && !candidate.isClosed();
+      async function openMenu() {
+        await application.evaluate(({ BrowserWindow }, id) => {
+          const owner = BrowserWindow.fromId(id);
+          owner.show();
+          owner.focus();
+          owner.webContents.focus();
+        }, winId);
+        await trigger.click();
+        await expect.poll(() => application.context().pages().some(isMenu)).toBe(true);
+        const menu = application.context().pages().find(isMenu);
+        await menu.getByRole('menuitemradio', { name: 'Personal', exact: true }).waitFor();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        return menu;
+      }
+      await fs.mkdir(path.join(output, 'profile-dropdown'), { recursive: true });
+      for (const theme of ['dark', 'light']) {
+        await command(page, { type: 'settings', theme });
+        const menu = await openMenu();
+        await expect(menu.locator('html')).toHaveAttribute('data-theme', theme);
+        await expect(
+          menu.getByRole('menuitemradio', { name: 'Personal', exact: true }),
+        ).toBeFocused();
+        const native = await application.evaluate(({ BrowserWindow }, id) => {
+          const owner = BrowserWindow.fromId(id);
+          const menu = owner.getChildWindows()[0];
+          const preferences = menu.webContents.getLastWebPreferences();
+          return {
+            parent: menu.getParentWindow().id,
+            visible: owner.contentView.children[0].getVisible(),
+            sandbox: preferences.sandbox,
+            isolated: preferences.contextIsolation,
+            node: preferences.nodeIntegration,
+            ownerBounds: owner.getBounds(),
+            menuBounds: menu.getBounds(),
+          };
+        }, winId);
+        expect(native).toMatchObject({
+          parent: winId,
+          visible: true,
+          sandbox: true,
+          isolated: true,
+          node: false,
+        });
+        expect(native.menuBounds.y).toBeGreaterThan(native.ownerBounds.y);
+        const colors = await menu.getByRole('menu').evaluate((element) => ({
+          background: getComputedStyle(element).backgroundColor,
+          overflow: element.scrollHeight > element.clientHeight,
+        }));
+        expect(colors.background).toBe(theme === 'dark' ? 'rgb(18, 18, 18)' : 'rgb(255, 255, 255)');
+        expect(colors.overflow).toBe(false);
+        const denied = await menu.evaluate(() => window.dock.command({ type: 'new-window' }));
+        expect(denied.ok).toBe(false);
+        await menu.keyboard.press('ArrowDown');
+        await expect(menu.getByRole('menuitemradio', { name: 'Work', exact: true })).toBeFocused();
+        await menu.keyboard.press('End');
+        await expect(menu.getByRole('menuitem', { name: 'Manage profiles' })).toBeFocused();
+        await menu.keyboard.press('Home');
+        await expect(
+          menu.getByRole('menuitemradio', { name: 'Personal', exact: true }),
+        ).toBeFocused();
+        await menu.screenshot({
+          path: path.join(output, 'profile-dropdown', `dropdown-${theme}.png`),
+        });
+        await menu.keyboard.press('Escape').catch((error) => {
+          if (!menu.isClosed()) throw error;
+        });
+        await expect.poll(() => menu.isClosed()).toBe(true);
+        await expect(trigger).toBeFocused();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      }
+      let menu = await openMenu();
+      await menu.keyboard.press('w');
+      await expect(menu.getByRole('menuitemradio', { name: 'Work', exact: true })).toBeFocused();
+      await menu.keyboard.press('Enter').catch((error) => {
+        if (!menu.isClosed()) throw error;
+      });
+      await expect.poll(async () => (await snapshot(page)).profileId).toBe(other.id);
+      await expect.poll(() => menu.isClosed()).toBe(true);
+      id = await remote(winId);
+      await waitRemote(id);
+      expect(await js(id, 'localStorage.getItem("sentinel")')).toBeNull();
+      menu = await openMenu();
+      await menu
+        .getByRole('menuitemradio', { name: 'Personal', exact: true })
+        .click()
+        .catch((error) => {
+          if (!menu.isClosed()) throw error;
+        });
+      await expect.poll(() => menu.isClosed()).toBe(true);
+      id = await remote(winId);
+      await waitRemote(id);
+      expect(await js(id, 'localStorage.getItem("sentinel")')).toBe('personal');
+      menu = await openMenu();
+      await menu
+        .getByRole('menuitem', { name: 'Manage profiles' })
+        .click()
+        .catch((error) => {
+          if (!menu.isClosed()) throw error;
+        });
+      await expect.poll(() => menu.isClosed()).toBe(true);
+      await expect(
+        page.getByRole('heading', { name: 'Login profiles', exact: true }),
+      ).toBeFocused();
+      await command(page, { type: 'panel', panel: 'none' });
+      menu = await openMenu();
+      await trigger.click();
+      await expect.poll(() => menu.isClosed()).toBe(true);
+      menu = await openMenu();
+      await application.evaluate(({ BrowserWindow }, id) => {
+        const owner = BrowserWindow.fromId(id);
+        owner.focus();
+        owner.contentView.children[0].webContents.focus();
+      }, winId);
+      await expect.poll(() => menu.isClosed()).toBe(true);
+      menu = await openMenu();
+      await menu.keyboard.press('Tab').catch((error) => {
+        if (!menu.isClosed()) throw error;
+      });
+      await expect.poll(() => menu.isClosed()).toBe(true);
+      await expect(trigger).toBeFocused();
+      await command(page, { type: 'settings', theme: original.settings.theme });
+    },
+  );
   await check(
     'same profile shares cookies and localStorage; another profile is isolated',
     async () => {
@@ -238,7 +442,7 @@ try {
       const size = () =>
         page.locator('.chrome').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       const aligned = async (expected) => {
-        await expect.poll(size).toBe(expected);
+        await expect.poll(size).toBe(Math.max(12, expected - 2));
         await expect
           .poll(async () => {
             const height = await page
@@ -266,7 +470,7 @@ try {
         await page
           .getByRole('button', { name: 'Home', exact: true })
           .evaluate((el) => getComputedStyle(el).fontSize),
-      ).toBe('20px');
+      ).toBe('18px');
       await js(id, `document.querySelector('#font-fixture .markdown').style.fontSize='22px'`);
       await aligned(22);
       await js(
@@ -293,13 +497,13 @@ try {
           sharedWindow,
           'parseFloat(getComputedStyle(document.querySelector(".chrome")).fontSize)',
         );
-      expect(await sharedSize()).toBe(16);
+      expect(await sharedSize()).toBe(14);
       await js(id, `console.debug('dock-font-forged:64')`);
-      expect(await size()).toBe(24);
+      expect(await size()).toBe(22);
       for (let step = 0; step < 10; step++)
         await command(page, { type: 'navigate', action: 'zoom-in' });
       await aligned(48);
-      await expect.poll(sharedSize).toBe(32);
+      await expect.poll(sharedSize).toBe(30);
       await command(page, { type: 'navigate', action: 'zoom-reset' });
       await aligned(24);
       await command(page, { type: 'navigate', action: 'reload' });
@@ -524,6 +728,39 @@ try {
     expect(list[0].path).not.toBe(list[1].path);
     for (const d of list) expect((await fs.stat(d.path)).size).toBe(4096);
   });
+  await check('download list exposes working file actions in light and dark themes', async () => {
+    await application.evaluate(({ app, shell }) => {
+      app.__dockFileCalls = [];
+      shell.openPath = async (value) => {
+        app.__dockFileCalls.push({ action: 'open', value });
+        return '';
+      };
+      shell.showItemInFolder = (value) => {
+        app.__dockFileCalls.push({ action: 'reveal', value });
+      };
+    });
+    await page.getByRole('button', { name: 'Downloads', exact: true }).click();
+    await expect(
+      page.getByRole('list', { name: 'Downloaded files' }).getByRole('listitem'),
+    ).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Clear finished', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Open file', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Show in folder', exact: true }).first().click();
+    await expect.poll(() => application.evaluate(({ app }) => app.__dockFileCalls.length)).toBe(2);
+    const calls = await application.evaluate(({ app }) => app.__dockFileCalls);
+    expect(calls.map((call) => call.action)).toEqual(['open', 'reveal']);
+    expect(calls[0].value).toBe((await snapshot(page)).downloads[0].path);
+    const theme = (await snapshot(page)).settings.theme;
+    for (const value of ['light', 'dark']) {
+      await command(page, { type: 'settings', theme: value });
+      await expect(page.locator('html')).toHaveAttribute('data-theme', value);
+      await page.screenshot({
+        path: path.join(output, 'ui-review', `downloads-files-${value}.png`),
+      });
+    }
+    await command(page, { type: 'settings', theme });
+    await page.keyboard.press('Escape');
+  });
   await check('download pause, resume, cancel and interrupted failure', async () => {
     await application.evaluate(
       ({ webContents }, { id, origin }) => webContents.fromId(id).downloadURL(`${origin}/slow`),
@@ -537,11 +774,22 @@ try {
     await expect
       .poll(async () => (await snapshot(page)).downloads.find((d) => d.id === download.id).state)
       .toBe('paused');
-    await command(page, { type: 'download', id: download.id, action: 'resume' });
-    await command(page, { type: 'download', id: download.id, action: 'cancel' });
+    await page.getByRole('button', { name: 'Downloads', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Resume download', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('progressbar', {
+        name: `Download progress for ${download.filename}`,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.screenshot({ path: path.join(output, 'ui-review', 'downloads-paused.png') });
+    await page.getByRole('button', { name: 'Resume download', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Pause download', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel download', exact: true }).click();
     await expect
       .poll(async () => (await snapshot(page)).downloads.find((d) => d.id === download.id).state)
       .toBe('cancelled');
+    await page.keyboard.press('Escape');
     await application.evaluate(
       ({ webContents }, { id, origin }) => webContents.fromId(id).downloadURL(`${origin}/broken`),
       { id, origin: fixture.origin },
@@ -682,6 +930,295 @@ try {
     );
     expect(erased).toHaveLength(0);
   });
+  await check(
+    'new-window UI reuses logins, creates isolated profiles and retains actionable errors',
+    async () => {
+      await fs.mkdir(path.join(output, 'ui-round2'), { recursive: true });
+      const trigger = page.getByRole('button', { name: 'New window', exact: true });
+      const windowCount = () =>
+        application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
+      const closeAddedWindows = () =>
+        application.evaluate(({ BrowserWindow }, keep) => {
+          for (const window of BrowserWindow.getAllWindows())
+            if (window.id !== keep) window.close();
+        }, winId);
+      await trigger.click();
+      await expect(page.getByRole('radio', { name: /Reuse a login/ })).toBeChecked();
+      await page.getByRole('button', { name: 'Open window', exact: true }).click();
+      await expect.poll(windowCount).toBe(2);
+      await expect.poll(async () => (await snapshot(page)).panel).toBe('none');
+      await closeAddedWindows();
+      await expect.poll(windowCount).toBe(1);
+      await trigger.click();
+      await page.getByRole('radio', { name: /Keep it separate/ }).check();
+      const nameInput = page.getByRole('textbox', { name: 'New profile name', exact: true });
+      await expect(nameInput).toBeFocused();
+      await nameInput.fill('Studio UI');
+      await page.screenshot({ path: path.join(output, 'ui-round2', 'new-separate.png') });
+      await page.getByRole('button', { name: 'Create & open', exact: true }).click();
+      await expect.poll(windowCount).toBe(2);
+      const studio = (await snapshot(page)).settings.profiles.find(
+        (profile) => profile.name === 'Studio UI',
+      );
+      expect(studio.id).not.toBe(profileId);
+      await expect.poll(async () => (await snapshot(page)).panel).toBe('none');
+      await trigger.click();
+      await page.getByRole('button', { name: 'Manage login profiles', exact: true }).click();
+      await page.getByLabel('More actions for Studio UI', { exact: true }).click();
+      await page.getByRole('button', { name: 'Delete profile', exact: true }).click();
+      await expect(page.getByRole('alert')).toContainText('Close all windows');
+      await expect(page.getByRole('alert')).toBeFocused();
+      expect((await snapshot(page)).panel).toBe('profiles');
+      expect(
+        (await snapshot(page)).settings.profiles.some((profile) => profile.id === studio.id),
+      ).toBe(true);
+      await closeAddedWindows();
+      await expect.poll(windowCount).toBe(1);
+      await page.getByLabel('More actions for Studio UI', { exact: true }).click();
+      await page.getByRole('button', { name: 'Delete profile', exact: true }).click();
+      await expect.poll(async () => (await snapshot(page)).settings.profiles.length).toBe(1);
+      await page.keyboard.press('Escape');
+    },
+  );
+  await check(
+    'profile menus, inline rename, default selection and add/delete work by keyboard and pointer',
+    async () => {
+      await page.getByRole('button', { name: 'New window', exact: true }).click();
+      await page.getByRole('button', { name: 'Manage login profiles', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Profile name', exact: true }).fill('Research');
+      await page.getByRole('button', { name: 'Create profile', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Research', exact: true })).toBeVisible();
+      const menu = page.getByLabel('More actions for Research', { exact: true });
+      await menu.click();
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeFocused();
+      await expect(page.getByRole('button', { name: 'Rename', exact: true })).toBeHidden();
+      expect((await snapshot(page)).panel).toBe('profiles');
+      await menu.click();
+      await page.getByRole('button', { name: 'Rename', exact: true }).click();
+      const rename = page.getByRole('textbox', { name: 'Rename profile', exact: true });
+      await expect(rename).toBeFocused();
+      await rename.fill('Discard this edit');
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeFocused();
+      await expect(page.getByRole('heading', { name: 'Research', exact: true })).toBeVisible();
+      await menu.click();
+      await page.getByRole('button', { name: 'Rename', exact: true }).click();
+      await rename.fill('Research workspace');
+      await page.getByRole('button', { name: 'Save name', exact: true }).click();
+      await expect(
+        page.getByRole('heading', { name: 'Research workspace', exact: true }),
+      ).toBeVisible();
+      const renamedMenu = page.getByLabel('More actions for Research workspace', { exact: true });
+      await expect(renamedMenu).toBeFocused();
+      await renamedMenu.click();
+      await page.getByRole('button', { name: 'Make default', exact: true }).click();
+      await expect
+        .poll(async () => (await snapshot(page)).settings.defaultProfileId)
+        .not.toBe(profileId);
+      await expect(renamedMenu).toBeFocused();
+      const renamedRow = page.getByRole('listitem').filter({ has: renamedMenu });
+      await expect(renamedRow.getByText('Default', { exact: true })).toBeVisible();
+      await expect(
+        renamedRow.getByRole('button', { name: 'Open window', exact: true }),
+      ).toBeEnabled();
+      await page.screenshot({ path: path.join(output, 'ui-round2', 'profiles-managed.png') });
+      await page.getByLabel('More actions for Personal', { exact: true }).click();
+      await page.getByRole('button', { name: 'Make default', exact: true }).click();
+      await expect
+        .poll(async () => (await snapshot(page)).settings.defaultProfileId)
+        .toBe(profileId);
+      await renamedMenu.click();
+      await page.getByRole('button', { name: 'Delete profile', exact: true }).click();
+      await expect.poll(async () => (await snapshot(page)).settings.profiles.length).toBe(1);
+      await page.keyboard.press('Escape');
+    },
+  );
+  await check(
+    'settings categories save theme, zoom, download behavior and folders without exposing update tokens',
+    async () => {
+      const original = (await snapshot(page)).settings;
+      const bounds = await application.evaluate(
+        ({ BrowserWindow }, id) => BrowserWindow.fromId(id).getBounds(),
+        winId,
+      );
+      await application.evaluate(
+        ({ BrowserWindow }, id) => BrowserWindow.fromId(id).setSize(1280, 860),
+        winId,
+      );
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      const categories = page.getByRole('navigation', { name: 'Settings categories', exact: true });
+      for (const theme of ['light', 'dark']) {
+        await page
+          .getByRole('group', { name: 'Theme', exact: true })
+          .getByRole('button', { name: theme, exact: false })
+          .click();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+        await page.screenshot({
+          path: path.join(output, 'ui-round2', `settings-appearance-${theme}.png`),
+        });
+      }
+      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      await expect.poll(async () => (await snapshot(page)).settings.zoom).toBeGreaterThan(1);
+      await page.getByRole('button', { name: 'Reset to 100%', exact: true }).click();
+      await expect.poll(async () => (await snapshot(page)).settings.zoom).toBe(1);
+      await categories.getByRole('button', { name: 'Downloads', exact: true }).click();
+      const saveSwitch = page.getByRole('switch', { name: /Ask where to save each file/ });
+      await saveSwitch.click();
+      await expect
+        .poll(async () => (await snapshot(page)).settings.askDownload)
+        .toBe(!original.askDownload);
+      await saveSwitch.setChecked(original.askDownload);
+      const folder = path.join(directory, 'ui-save-folder');
+      await fs.mkdir(folder, { recursive: true });
+      await application.evaluate(({ dialog }, value) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [value] });
+      }, folder);
+      await page.getByRole('button', { name: 'Change', exact: true }).click();
+      await expect(page.getByRole('textbox', { name: 'Default folder', exact: true })).toHaveValue(
+        folder,
+      );
+      await application.evaluate(({ dialog }, value) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [value] });
+      }, original.downloadDirectory);
+      await page.getByRole('button', { name: 'Change', exact: true }).click();
+      await expect
+        .poll(async () => (await snapshot(page)).settings.downloadDirectory)
+        .toBe(original.downloadDirectory);
+      await page.screenshot({ path: path.join(output, 'ui-round2', 'settings-downloads.png') });
+      await categories.getByRole('button', { name: 'Updates', exact: true }).click();
+      const token = page.getByLabel('GitHub update token', { exact: true });
+      await expect(token).toBeHidden();
+      await page.getByText('Private repository access', { exact: true }).click();
+      await token.fill('SYNTHETIC_NOT_A_CREDENTIAL');
+      await categories.getByRole('button', { name: 'Appearance', exact: true }).click();
+      await categories.getByRole('button', { name: 'Updates', exact: true }).click();
+      await page.getByText('Private repository access', { exact: true }).click();
+      await expect(token).toHaveValue('');
+      expect(JSON.stringify(await snapshot(page))).not.toContain('SYNTHETIC_NOT_A_CREDENTIAL');
+      await page.screenshot({ path: path.join(output, 'ui-round2', 'settings-updates.png') });
+      await application.evaluate(
+        ({ BrowserWindow }, id) => BrowserWindow.fromId(id).setSize(740, 650),
+        winId,
+      );
+      await categories.getByRole('button', { name: 'Appearance', exact: true }).click();
+      const layout = await page.evaluate(() => ({
+        width: innerWidth,
+        right: document.querySelector('.settings-content').getBoundingClientRect().right,
+        overflow:
+          document.querySelector('.workspace').scrollWidth >
+          document.querySelector('.workspace').clientWidth,
+      }));
+      expect(layout.right).toBeLessThanOrEqual(layout.width);
+      expect(layout.overflow).toBe(false);
+      await page.screenshot({ path: path.join(output, 'ui-round2', 'settings-compact.png') });
+      await categories.getByRole('button', { name: 'Advanced', exact: true }).click();
+      await page.getByRole('button', { name: 'Manage profiles', exact: true }).click();
+      await expect(
+        page.getByRole('heading', { name: 'Login profiles', exact: true }),
+      ).toBeVisible();
+      await page.keyboard.press('Escape');
+      await command(page, { type: 'settings', theme: original.theme });
+      await application.evaluate(
+        ({ BrowserWindow }, { id, bounds }) => BrowserWindow.fromId(id).setBounds(bounds),
+        { id: winId, bounds },
+      );
+    },
+  );
+  await check(
+    'About exposes version, update state, release notes and browser-only project links',
+    async () => {
+      await fs.mkdir(path.join(output, 'about'), { recursive: true });
+      const initial = await snapshot(page);
+      const bounds = await application.evaluate(
+        ({ BrowserWindow }, id) => BrowserWindow.fromId(id).getBounds(),
+        winId,
+      );
+      await application.evaluate(
+        ({ BrowserWindow }, id) => BrowserWindow.fromId(id).setSize(1280, 900),
+        winId,
+      );
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      const categories = page.getByRole('navigation', { name: 'Settings categories', exact: true });
+      await categories.getByRole('button', { name: 'About', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'ChattyDock', exact: true })).toBeVisible();
+      await expect(page.locator('.about-build')).toContainText(`Version ${initial.version}`);
+      await expect(page.getByRole('heading', { name: 'In this build', exact: true })).toHaveCount(
+        0,
+      );
+      await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+      await expect(
+        page.getByRole('heading', { name: 'Development build', exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Up to date', exact: true })).toHaveCount(0);
+      for (const theme of ['light', 'dark']) {
+        await command(page, { type: 'settings', theme });
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+        await page
+          .locator('.panel')
+          .screenshot({ path: path.join(output, 'about', `about-${theme}.png`) });
+      }
+      const actual = await snapshot(page);
+      const fixtureState = {
+        ...actual,
+        update: {
+          stage: 'downloading',
+          message: 'Downloading update in the background…',
+          version: '0.3.0',
+          percent: 42,
+          checkedAt: Date.now(),
+          releaseDate: '2026-10-19T08:00:00.000Z',
+          releaseNotes:
+            'Improved multi-window profiles.\n<img src=x onerror=alert(1)> is text, not markup.',
+        },
+      };
+      await application.evaluate(
+        ({ BrowserWindow }, { id, state }) =>
+          BrowserWindow.fromId(id).webContents.send('dock:state', state),
+        { id: winId, state: fixtureState },
+      );
+      await expect(
+        page.getByRole('progressbar', { name: 'Update download progress', exact: true }),
+      ).toHaveAttribute('value', '42');
+      await expect(
+        page.getByRole('heading', { name: 'Release notes · 0.3.0', exact: true }),
+      ).toBeVisible();
+      await expect(page.locator('.about-release-notes')).toContainText(
+        '<img src=x onerror=alert(1)>',
+      );
+      await expect(page.locator('.about-release-notes img')).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: 'Check for updates', exact: true }),
+      ).toBeDisabled();
+      await expect(page.locator('.about-checked')).toContainText('Last successful check:');
+      await command(page, { type: 'snapshot' });
+      await page.getByRole('button', { name: 'Version history', exact: true }).click();
+      await page.getByRole('button', { name: 'Project on GitHub', exact: true }).click();
+      const external = await application.evaluate(({ app }) => app.__dockExternalCalls);
+      expect(external).toContain('https://github.com/infiniwire/chatty-dock/releases');
+      expect(external).toContain('https://github.com/infiniwire/chatty-dock');
+      expect(await js(id, 'location.origin')).toBe(fixture.origin);
+      await page.getByRole('button', { name: 'Update settings', exact: true }).click();
+      await expect(
+        categories.getByRole('button', { name: 'Updates', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      await command(page, { type: 'panel', panel: 'about' });
+      await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Update settings', exact: true }).click();
+      await expect(
+        page.getByRole('heading', { name: 'Automatic updates', exact: true }),
+      ).toBeVisible();
+      await expect(
+        categories.getByRole('button', { name: 'Updates', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      await page.keyboard.press('Escape');
+      await command(page, { type: 'settings', theme: initial.settings.theme });
+      await application.evaluate(
+        ({ BrowserWindow }, { id, bounds }) => BrowserWindow.fromId(id).setBounds(bounds),
+        { id: winId, bounds },
+      );
+    },
+  );
   await check('local settings and profile UI render without errors', async () => {
     await command(page, { type: 'panel', panel: 'settings' });
     await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
@@ -708,7 +1245,17 @@ try {
       'update credentials are OS-encrypted and excluded from renderer snapshots',
       async () => {
         const token = 'github_pat_SYNTHETIC_DO_NOT_USE';
-        await command(page, { type: 'update-token', token });
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page
+          .getByRole('navigation', { name: 'Settings categories', exact: true })
+          .getByRole('button', { name: 'Updates', exact: true })
+          .click();
+        await page.getByText('Private repository access', { exact: true }).click();
+        await page.getByLabel('GitHub update token', { exact: true }).fill(token);
+        await page.getByRole('button', { name: 'Save token', exact: true }).click();
+        await expect(
+          page.getByRole('status').filter({ hasText: 'Update access saved.' }),
+        ).toBeVisible();
         const encrypted = await fs.readFile(path.join(directory, 'update-token.enc'));
         expect(encrypted.includes(Buffer.from(token))).toBe(false);
         const decrypted = await application.evaluate(
@@ -718,8 +1265,12 @@ try {
         );
         expect(decrypted).toBe(token);
         expect(JSON.stringify(await snapshot(page))).not.toContain(token);
-        await command(page, { type: 'update-token', token: '' });
+        await page.getByRole('button', { name: 'Remove saved token', exact: true }).click();
+        await expect(
+          page.getByRole('status').filter({ hasText: 'Saved token removed.' }),
+        ).toBeVisible();
         await expect(fs.access(path.join(directory, 'update-token.enc'))).rejects.toThrow();
+        await page.keyboard.press('Escape');
       },
     );
   await check('settings and session survive a full restart', async () => {

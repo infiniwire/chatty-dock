@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import sharp from 'sharp';
 import pngToIco from 'png-to-ico';
-const png = await sharp('build/icon.svg').resize(1024).png().toBuffer();
+const png = await sharp('build/icon-source.png').resize(1024).png().toBuffer();
 await fs.writeFile('build/icon.png', png);
 const buffers = await Promise.all(
   [16, 24, 32, 48, 64, 128, 256].map((size) => sharp(png).resize(size).png().toBuffer()),
