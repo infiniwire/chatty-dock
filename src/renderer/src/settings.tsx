@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   ArrowUpRight,
@@ -44,7 +44,11 @@ export function SettingsPanel({
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState('');
   const [message, setMessage] = useState('');
+  const [pendingAskDownload, setPendingAskDownload] = useState<boolean>();
   const busyRef = useRef(false);
+  useEffect(() => {
+    if (pendingAskDownload === state.settings.askDownload) setPendingAskDownload(undefined);
+  }, [pendingAskDownload, state.settings.askDownload]);
   const perform: RunCommand = async (command) => {
     if (busyRef.current) return { ok: false, error: 'An action is already in progress.' };
     busyRef.current = true;
@@ -166,11 +170,14 @@ export function SettingsPanel({
                 id="ask-download"
                 type="checkbox"
                 role="switch"
-                checked={state.settings.askDownload}
-                disabled={busy}
-                onChange={(event) =>
-                  void perform({ type: 'settings', askDownload: event.target.checked })
-                }
+                checked={pendingAskDownload ?? state.settings.askDownload}
+                disabled={busy || pendingAskDownload !== undefined}
+                onChange={async (event) => {
+                  const askDownload = event.currentTarget.checked;
+                  setPendingAskDownload(askDownload);
+                  const result = await perform({ type: 'settings', askDownload });
+                  if (!result.ok) setPendingAskDownload(undefined);
+                }}
               />
             </label>
             <div className="folder-setting">
