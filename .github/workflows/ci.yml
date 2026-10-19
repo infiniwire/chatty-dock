@@ -1,0 +1,47 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            arch: x64
+          - runner: macos-15-intel
+            arch: x64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Verify runner architecture
+        run: node -e "if(process.arch !== '${{ matrix.arch }}') process.exit(1)"
+      - run: npm ci
+      - run: npm run verify
+      - name: Verify silent update installation and automatic relaunch
+        if: runner.os == 'Windows' && github.event_name == 'push'
+        run: npm run test:update-install
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: evidence-${{ matrix.runner }}-${{ matrix.arch }}
+          path: |
+            artifacts/*.json
+            artifacts/*.png
+            artifacts/update-install/result.json
+          retention-days: 7

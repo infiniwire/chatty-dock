@@ -1,0 +1,8 @@
+node_modules
+out
+dist
+artifacts
+package-lock.json
+build/*.png
+build/*.ico
+build/*.icns

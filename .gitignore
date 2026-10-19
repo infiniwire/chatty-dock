@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist/
+artifacts/
+test-results/
+coverage/
+*.log
+.env*
+!.env.example
+*.p12
+*.pfx
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+*.WebView2/
