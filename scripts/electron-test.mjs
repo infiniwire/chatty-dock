@@ -272,33 +272,50 @@ try {
         await expect.poll(() => menu.isClosed()).toBe(true);
         await expect(layoutTrigger).toBeFocused();
       }
-      const a = ownerState.area,
-        left = Math.floor(a.width / 2),
-        top = Math.floor(a.height / 2);
-      const placements = [
-        ['Left half', 'left', { x: a.x, y: a.y, width: left, height: a.height }],
-        ['Right half', 'right', { x: a.x + left, y: a.y, width: a.width - left, height: a.height }],
-        ['Top half', 'top', { x: a.x, y: a.y, width: a.width, height: top }],
-        ['Bottom half', 'bottom', { x: a.x, y: a.y + top, width: a.width, height: a.height - top }],
-        ['Top left quarter', 'top-left', { x: a.x, y: a.y, width: left, height: top }],
-        [
-          'Top right quarter',
-          'top-right',
-          { x: a.x + left, y: a.y, width: a.width - left, height: top },
-        ],
-        [
-          'Bottom left quarter',
-          'bottom-left',
-          { x: a.x, y: a.y + top, width: left, height: a.height - top },
-        ],
-        [
-          'Bottom right quarter',
-          'bottom-right',
-          { x: a.x + left, y: a.y + top, width: a.width - left, height: a.height - top },
-        ],
-      ];
-      for (const [label, preset, expected] of placements) {
+      const placementsFor = (a) => {
+        const left = Math.floor(a.width / 2),
+          top = Math.floor(a.height / 2);
+        return [
+          ['Left half', 'left', { x: a.x, y: a.y, width: left, height: a.height }],
+          [
+            'Right half',
+            'right',
+            { x: a.x + left, y: a.y, width: a.width - left, height: a.height },
+          ],
+          ['Top half', 'top', { x: a.x, y: a.y, width: a.width, height: top }],
+          [
+            'Bottom half',
+            'bottom',
+            { x: a.x, y: a.y + top, width: a.width, height: a.height - top },
+          ],
+          ['Top left quarter', 'top-left', { x: a.x, y: a.y, width: left, height: top }],
+          [
+            'Top right quarter',
+            'top-right',
+            { x: a.x + left, y: a.y, width: a.width - left, height: top },
+          ],
+          [
+            'Bottom left quarter',
+            'bottom-left',
+            { x: a.x, y: a.y + top, width: left, height: a.height - top },
+          ],
+          [
+            'Bottom right quarter',
+            'bottom-right',
+            { x: a.x + left, y: a.y + top, width: a.width - left, height: a.height - top },
+          ],
+        ];
+      };
+      for (const [label, preset] of placementsFor(ownerState.area)) {
         const menu = await openLayout();
+        // Activating an app can change macOS Dock/work-area dimensions.
+        // Read the same live display area that the command will use, rather than startup geometry.
+        const area = await application.evaluate(
+          ({ BrowserWindow, screen }, id) =>
+            screen.getDisplayMatching(BrowserWindow.fromId(id).getBounds()).workArea,
+          winId,
+        );
+        const expected = placementsFor(area).find((item) => item[1] === preset)[2];
         await menu
           .getByRole('menuitemradio', { name: label, exact: true })
           .click()
@@ -1405,24 +1422,40 @@ try {
         },
       };
       await application.evaluate(
-        ({ BrowserWindow }, { id, state }) =>
-          BrowserWindow.fromId(id).webContents.send('dock:state', state),
+        ({ BrowserWindow }, { id, state }) => {
+          const contents = BrowserWindow.fromId(id).webContents;
+          const original = contents.send;
+          contents.__dockOriginalSend = original;
+          // Isolate this renderer-only fixture from the normal debounced state stream.
+          contents.send = function (channel, ...args) {
+            if (channel !== 'dock:state') return original.call(this, channel, ...args);
+          };
+          original.call(contents, 'dock:state', state);
+        },
         { id: winId, state: fixtureState },
       );
-      await expect(
-        page.getByRole('progressbar', { name: 'Update download progress', exact: true }),
-      ).toHaveAttribute('value', '42');
-      await expect(
-        page.getByRole('heading', { name: 'Release notes · 0.3.0', exact: true }),
-      ).toBeVisible();
-      await expect(page.locator('.about-release-notes')).toContainText(
-        '<img src=x onerror=alert(1)>',
-      );
-      await expect(page.locator('.about-release-notes img')).toHaveCount(0);
-      await expect(
-        page.getByRole('button', { name: 'Check for updates', exact: true }),
-      ).toBeDisabled();
-      await expect(page.locator('.about-checked')).toContainText('Last successful check:');
+      try {
+        await expect(
+          page.getByRole('progressbar', { name: 'Update download progress', exact: true }),
+        ).toHaveAttribute('value', '42');
+        await expect(
+          page.getByRole('heading', { name: 'Release notes · 0.3.0', exact: true }),
+        ).toBeVisible();
+        await expect(page.locator('.about-release-notes')).toContainText(
+          '<img src=x onerror=alert(1)>',
+        );
+        await expect(page.locator('.about-release-notes img')).toHaveCount(0);
+        await expect(
+          page.getByRole('button', { name: 'Check for updates', exact: true }),
+        ).toBeDisabled();
+        await expect(page.locator('.about-checked')).toContainText('Last successful check:');
+      } finally {
+        await application.evaluate(({ BrowserWindow }, id) => {
+          const contents = BrowserWindow.fromId(id).webContents;
+          contents.send = contents.__dockOriginalSend;
+          delete contents.__dockOriginalSend;
+        }, winId);
+      }
       await command(page, { type: 'snapshot' });
       await page.getByRole('button', { name: 'Version history', exact: true }).click();
       await page.getByRole('button', { name: 'Project on GitHub', exact: true }).click();
