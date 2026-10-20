@@ -73,6 +73,17 @@ it('restores disconnected-monitor windows inside the available display', () => {
   ).toEqual({ x: 0, y: 0, width: 1280, height: 720 });
 });
 it('rejects malformed privileged commands', () => {
+  expect(commandSchema.safeParse({ type: 'window-layout', layout: 'left' }).success).toBe(true);
+  expect(
+    commandSchema.safeParse({ type: 'window-layout', layout: 'arbitrary-bounds', x: 1 }).success,
+  ).toBe(false);
+  expect(
+    commandSchema.safeParse({
+      type: 'layout-menu',
+      action: 'open',
+      anchor: { x: 0, y: 0, width: 0, height: 32 },
+    }).success,
+  ).toBe(false);
   for (const invalid of [NaN, Infinity, 16001]) {
     expect(
       commandSchema.safeParse({

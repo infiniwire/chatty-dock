@@ -142,6 +142,238 @@ try {
   const winId = await application.evaluate(
     ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].id,
   );
+  if (process.platform === 'win32') {
+    await check(
+      'Windows taskbar relaunch identity, icon and shortcut survive a native round trip',
+      async () => {
+        await application.evaluate(({ app, BrowserWindow }) => {
+          app.__dockTaskbar = [];
+          app.__dockSetAppDetails = BrowserWindow.prototype.setAppDetails;
+          BrowserWindow.prototype.setAppDetails = function (details) {
+            app.__dockTaskbar.push({ windowId: this.id, details });
+            return app.__dockSetAppDetails.call(this, details);
+          };
+        });
+        try {
+          await command(page, { type: 'new-window', profileId });
+          const info = await application.evaluate(({ app, BrowserWindow }) => {
+            const captured = app.__dockTaskbar[0];
+            return {
+              ...captured,
+              parent: BrowserWindow.fromId(captured.windowId).getParentWindow()?.id,
+              packaged: app.isPackaged,
+              executable: process.execPath,
+              appPath: app.getAppPath(),
+            };
+          });
+          expect(info.details.appId).toBe('io.github.infiniwire.chatty-dock.integration-test');
+          expect(info.details.appIconPath).toMatch(/icon\.ico$/);
+          expect((await fs.stat(info.details.appIconPath)).size).toBeGreaterThan(0);
+          expect(info.details.relaunchCommand).toBe(
+            `"${info.executable}"${info.packaged ? '' : ` "${info.appPath}"`}`,
+          );
+          expect(info.details.relaunchDisplayName).toBe(
+            info.packaged ? 'ChattyDock' : 'ChattyDock (Development)',
+          );
+          const link = path.join(directory, 'ChattyDock taskbar test.lnk');
+          const options = {
+            target: info.executable,
+            cwd: path.dirname(info.executable),
+            args: info.packaged ? '' : `"${info.appPath}"`,
+            icon: info.details.appIconPath,
+            iconIndex: info.details.appIconIndex,
+            appUserModelId: info.details.appId,
+          };
+          const shortcut = await application.evaluate(
+            ({ shell }, { link, options }) => {
+              if (!shell.writeShortcutLink(link, 'create', options))
+                throw new Error('Could not write test shortcut.');
+              return shell.readShortcutLink(link);
+            },
+            { link, options },
+          );
+          expect(shortcut).toMatchObject(options);
+          await application.evaluate(
+            ({ BrowserWindow }, windowId) => BrowserWindow.fromId(windowId).close(),
+            info.windowId,
+          );
+        } finally {
+          await application.evaluate(({ app, BrowserWindow }) => {
+            BrowserWindow.prototype.setAppDetails = app.__dockSetAppDetails;
+            delete app.__dockSetAppDetails;
+            delete app.__dockTaskbar;
+          });
+        }
+      },
+    );
+  }
+  await check(
+    'window layout menu snaps only its owner, restores bounds and respects screen work areas',
+    async () => {
+      const original = await snapshot(page);
+      const ownerState = await application.evaluate(({ BrowserWindow, screen }, id) => {
+        const win = BrowserWindow.fromId(id);
+        return {
+          bounds: win.getBounds(),
+          minimum: win.getMinimumSize(),
+          maximized: win.isMaximized(),
+          area: screen.getDisplayMatching(win.getBounds()).workArea,
+        };
+      }, winId);
+      const layoutTrigger = page.getByRole('button', { name: 'Window layout', exact: true });
+      const triggerOrder = await page
+        .locator('.topbar')
+        .evaluate((element) =>
+          [...element.querySelectorAll('button')].map((button) =>
+            button.getAttribute('aria-label'),
+          ),
+        );
+      expect(triggerOrder[triggerOrder.indexOf('Downloads') + 1]).toBe('Window layout');
+      const websiteBefore = await js(id, 'location.href');
+      await command(page, { type: 'new-window', profileId });
+      const sibling = await application.evaluate(({ BrowserWindow }, keep) => {
+        const win = BrowserWindow.getAllWindows().find((window) => window.id !== keep);
+        return { id: win.id, bounds: win.getBounds() };
+      }, winId);
+      const activeMenu = (candidate) =>
+        !candidate.isClosed() && candidate.url().includes('surface=layout-menu');
+      async function openLayout() {
+        await application.evaluate(({ BrowserWindow }, id) => {
+          const win = BrowserWindow.fromId(id);
+          win.show();
+          win.focus();
+          win.webContents.focus();
+        }, winId);
+        await layoutTrigger.click();
+        await expect.poll(() => application.context().pages().some(activeMenu)).toBe(true);
+        const menu = application.context().pages().find(activeMenu);
+        await menu.getByRole('menuitemradio', { name: 'Left half', exact: true }).waitFor();
+        await expect(layoutTrigger).toHaveAttribute('aria-expanded', 'true');
+        return menu;
+      }
+      await fs.mkdir(path.join(output, 'window-layout'), { recursive: true });
+      for (const theme of ['dark', 'light']) {
+        await command(page, { type: 'settings', theme });
+        const menu = await openLayout();
+        await expect(menu.locator('html')).toHaveAttribute('data-theme', theme);
+        await expect(menu.getByRole('menuitem', { name: 'Restore previous size' })).toBeDisabled();
+        const denied = await menu.evaluate(() =>
+          window.dock.command({ type: 'profile-switch', id: crypto.randomUUID() }),
+        );
+        expect(denied.ok).toBe(false);
+        await menu.keyboard.press('ArrowRight');
+        await expect(
+          menu.getByRole('menuitemradio', { name: 'Left half', exact: true }),
+        ).toBeFocused();
+        await menu.screenshot({ path: path.join(output, 'window-layout', `menu-${theme}.png`) });
+        await menu.keyboard.press('Escape').catch((error) => {
+          if (!menu.isClosed()) throw error;
+        });
+        await expect.poll(() => menu.isClosed()).toBe(true);
+        await expect(layoutTrigger).toBeFocused();
+      }
+      const a = ownerState.area,
+        left = Math.floor(a.width / 2),
+        top = Math.floor(a.height / 2);
+      const placements = [
+        ['Left half', 'left', { x: a.x, y: a.y, width: left, height: a.height }],
+        ['Right half', 'right', { x: a.x + left, y: a.y, width: a.width - left, height: a.height }],
+        ['Top half', 'top', { x: a.x, y: a.y, width: a.width, height: top }],
+        ['Bottom half', 'bottom', { x: a.x, y: a.y + top, width: a.width, height: a.height - top }],
+        ['Top left quarter', 'top-left', { x: a.x, y: a.y, width: left, height: top }],
+        [
+          'Top right quarter',
+          'top-right',
+          { x: a.x + left, y: a.y, width: a.width - left, height: top },
+        ],
+        [
+          'Bottom left quarter',
+          'bottom-left',
+          { x: a.x, y: a.y + top, width: left, height: a.height - top },
+        ],
+        [
+          'Bottom right quarter',
+          'bottom-right',
+          { x: a.x + left, y: a.y + top, width: a.width - left, height: a.height - top },
+        ],
+      ];
+      for (const [label, preset, expected] of placements) {
+        const menu = await openLayout();
+        await menu
+          .getByRole('menuitemradio', { name: label, exact: true })
+          .click()
+          .catch((error) => {
+            if (!menu.isClosed()) throw error;
+          });
+        await expect
+          .poll(() =>
+            application.evaluate(
+              ({ BrowserWindow }, id) => BrowserWindow.fromId(id).getBounds(),
+              winId,
+            ),
+          )
+          .toEqual(expected);
+        await expect.poll(() => menu.isClosed()).toBe(true);
+        await expect.poll(async () => (await snapshot(page)).windowLayout).toBe(preset);
+        expect(await remote(winId)).toBe(id);
+        expect(await js(id, 'location.href')).toBe(websiteBefore);
+      }
+      let menu = await openLayout();
+      await menu
+        .getByRole('menuitemradio', { name: 'Fill screen', exact: true })
+        .click()
+        .catch((error) => {
+          if (!menu.isClosed()) throw error;
+        });
+      await expect
+        .poll(() =>
+          application.evaluate(
+            ({ BrowserWindow }, id) => BrowserWindow.fromId(id).isMaximized(),
+            winId,
+          ),
+        )
+        .toBe(true);
+      menu = await openLayout();
+      await expect(
+        menu.getByRole('menuitemradio', { name: 'Fill screen', exact: true }),
+      ).toHaveAttribute('aria-checked', 'true');
+      await menu
+        .getByRole('menuitem', { name: 'Restore previous size' })
+        .click()
+        .catch((error) => {
+          if (!menu.isClosed()) throw error;
+        });
+      await expect
+        .poll(async () => {
+          const current = await application.evaluate(
+            ({ BrowserWindow }, id) => BrowserWindow.fromId(id).getBounds(),
+            winId,
+          );
+          return ['x', 'y', 'width', 'height'].every(
+            (key) => Math.abs(current[key] - ownerState.bounds[key]) <= 1,
+          );
+        })
+        .toBe(true);
+      expect(
+        await application.evaluate(
+          ({ BrowserWindow }, id) => BrowserWindow.fromId(id).getMinimumSize(),
+          winId,
+        ),
+      ).toEqual(ownerState.minimum);
+      expect((await snapshot(page)).canRestoreWindowLayout).toBe(false);
+      expect(
+        await application.evaluate(
+          ({ BrowserWindow }, id) => BrowserWindow.fromId(id).getBounds(),
+          sibling.id,
+        ),
+      ).toEqual(sibling.bounds);
+      await application.evaluate(
+        ({ BrowserWindow }, id) => BrowserWindow.fromId(id).close(),
+        sibling.id,
+      );
+      await command(page, { type: 'settings', theme: original.settings.theme });
+    },
+  );
   await check('downloads empty state, keyboard return, themes and compact toolbar', async () => {
     const original = await snapshot(page);
     const bounds = await application.evaluate(

@@ -5,8 +5,8 @@ export type Profile = z.infer<typeof profileSchema>;
 export const boundsSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
-  width: z.number().min(720).max(16000),
-  height: z.number().min(500).max(16000),
+  width: z.number().min(320).max(16000),
+  height: z.number().min(240).max(16000),
 });
 export const settingsSchema = z
   .object({
@@ -31,6 +31,19 @@ export const settingsSchema = z
 export type Settings = z.infer<typeof settingsSchema>;
 export type Panel =
   'none' | 'new' | 'profiles' | 'downloads' | 'settings' | 'about' | 'diagnostics';
+export const windowLayoutSchema = z.enum([
+  'fill',
+  'left',
+  'right',
+  'top',
+  'bottom',
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+  'restore',
+]);
+export type WindowLayout = z.infer<typeof windowLayoutSchema>;
 export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot') }),
   z.object({
@@ -46,6 +59,20 @@ export const commandSchema = z.discriminatedUnion('type', [
       })
       .optional(),
   }),
+  z.object({
+    type: z.literal('layout-menu'),
+    action: z.enum(['open', 'close']),
+    restoreFocus: z.boolean().optional(),
+    anchor: z
+      .object({
+        x: z.number().finite().min(-16000).max(16000),
+        y: z.number().finite().min(-16000).max(16000),
+        width: z.number().finite().positive().max(16000),
+        height: z.number().finite().positive().max(16000),
+      })
+      .optional(),
+  }),
+  z.object({ type: z.literal('window-layout'), layout: windowLayoutSchema }),
   z.object({
     type: z.literal('panel'),
     panel: z.enum(['none', 'new', 'profiles', 'downloads', 'settings', 'about', 'diagnostics']),
@@ -130,6 +157,9 @@ export type Snapshot = {
   profileId: string;
   panel: Panel;
   profileMenuOpen: boolean;
+  layoutMenuOpen: boolean;
+  windowLayout: WindowLayout | null;
+  canRestoreWindowLayout: boolean;
   title: string;
   typography: { fontSize: number; toolbarHeight: number };
   loading: boolean;

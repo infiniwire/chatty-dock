@@ -17,6 +17,7 @@ Download packages from this repository's Releases page. While this repository is
 ## Features
 
 - Multiple independent windows, coordinated by one application instance.
+- One-click window layouts: fill the current display, halves, quarters, and restore the previous size.
 - Reuse the current login, select another saved profile, or create an isolated profile.
 - Persistent profile names, default profile, window position, theme, website zoom, and download preferences.
 - Native website file selection, file drag/drop, and clipboard image paste.

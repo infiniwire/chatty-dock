@@ -7,6 +7,7 @@ import { NewWindowPanel, ProfilesPanel, panelDescriptions } from './profiles';
 import { SettingsPanel, type SettingsSection } from './settings';
 import { AboutPanel } from './about';
 import { ProfileSwitcher, ProfileMenuSurface } from './profile-dropdown';
+import { WindowLayoutButton, WindowLayoutMenu } from './window-layout';
 import './style.css';
 
 declare global {
@@ -77,7 +78,11 @@ function App(): React.JSX.Element {
     setError('');
     try {
       const result = await window.dock.command(command);
-      if (!result.ok) setError(result.error);
+      if (!result.ok) {
+        if (result.error === 'Invalid command.' && command.type === 'layout-menu')
+          result.error = 'Restart ChattyDock to use window layouts.';
+        setError(result.error);
+      }
       return result;
     } catch {
       const error = 'The action could not be completed. Please try again.';
@@ -184,6 +189,7 @@ function App(): React.JSX.Element {
               </span>
             )}
           </button>
+          <WindowLayoutButton state={state} run={run} />
           <button
             className={`icon-button settings-button${state.panel === 'settings' ? ' is-selected' : ''}`}
             title="Settings"
@@ -324,6 +330,15 @@ function App(): React.JSX.Element {
     </>
   );
 }
-const profileMenu = new URL(location.href).searchParams.get('surface') === 'profile-menu';
-if (profileMenu) document.documentElement.classList.add('profile-menu-surface');
-createRoot(document.getElementById('root')!).render(profileMenu ? <ProfileMenuSurface /> : <App />);
+const surface = new URL(location.href).searchParams.get('surface');
+if (surface === 'profile-menu' || surface === 'layout-menu')
+  document.documentElement.classList.add('profile-menu-surface');
+createRoot(document.getElementById('root')!).render(
+  surface === 'profile-menu' ? (
+    <ProfileMenuSurface />
+  ) : surface === 'layout-menu' ? (
+    <WindowLayoutMenu />
+  ) : (
+    <App />
+  ),
+);

@@ -1678,3 +1678,114 @@ td {
     transition: none !important;
   }
 }
+
+.layout-menu-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.layout-menu-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 12px;
+  font-weight: 500;
+}
+.layout-menu-heading > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.layout-menu-options {
+  overflow-y: auto;
+  min-height: 0;
+}
+.layout-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+}
+.layout-menu-row + .layout-menu-row {
+  border-top: 1px solid var(--line);
+}
+.layout-row-count {
+  color: var(--muted);
+  width: 18px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.layout-choice {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 44px;
+  padding: 7px;
+  min-height: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+}
+.layout-choice:hover {
+  border-color: var(--line);
+}
+.layout-choice[aria-checked='true'] {
+  background: var(--hover);
+  border-color: var(--muted);
+}
+.layout-choice:focus-visible {
+  outline-offset: -2px;
+}
+.layout-preview {
+  display: grid;
+  width: 34px;
+  height: 25px;
+  gap: 1px;
+  background: var(--muted);
+  border: 1px solid var(--muted);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.layout-preview > span {
+  background: var(--surface);
+}
+.layout-preview > .is-target {
+  background: color-mix(in srgb, var(--sidebar-text) 35%, var(--surface));
+}
+.layout-menu-footer {
+  margin-top: auto;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+.layout-menu-footer > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  background: transparent;
+  border-color: transparent;
+  padding: 8px;
+  font-size: 12px;
+  text-align: left;
+}
+.layout-menu-footer > button:not(:disabled):hover {
+  background: var(--hover);
+}
+.layout-menu-footer svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+.layout-menu-error {
+  color: var(--danger);
+  font-size: 11px;
+  padding: 6px;
+  line-height: 1.4;
+  max-height: 52px;
+  overflow: auto;
+}

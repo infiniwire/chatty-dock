@@ -19,16 +19,16 @@ Windows output is unsigned. macOS output is ad-hoc signed and not notarized. Nei
 After changing `package.json` and the lockfile together, run checks and commit:
 
 ```sh
-npm version 0.2.1 --no-git-tag-version
+npm version 0.2.2 --no-git-tag-version
 npm run verify
 git add .
-git commit -m "Release 0.2.1"
+git commit -m "Release 0.2.2"
 git push origin main
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
-The version tag must match `package.json`. Tags such as `v0.2.1-beta.1` produce prereleases; stable tags produce stable releases. Tags are created by the maintainer, never automatically on every commit.
+The version tag must match `package.json`. Tags such as `v0.2.2-beta.1` produce prereleases; stable tags produce stable releases. Tags are created by the maintainer, never automatically on every commit.
 
 Manual `workflow_dispatch` builds and collects artifacts without publishing, even if dispatched against a tag. Use it to verify packaging before tagging a public release. Artifacts remain subject to repository access and retention. The repository can remain private throughout.
 

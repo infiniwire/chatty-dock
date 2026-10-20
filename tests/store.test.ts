@@ -11,10 +11,13 @@ it('persists valid settings with serialized atomic writes', async () => {
     await store.load();
     const id = store.settings.profiles[0].id;
     store.settings.profiles[0].name = 'Work';
+    store.settings.bounds = { x: -640, y: 40, width: 640, height: 360 };
     await Promise.all([store.flush(), store.flush()]);
     const restored = new Store(directory, os.tmpdir());
     await restored.load();
     expect(restored.settings.profiles[0]).toEqual({ id, name: 'Work' });
+    expect(restored.recovered).toBe(false);
+    expect(restored.settings.bounds).toEqual({ x: -640, y: 40, width: 640, height: 360 });
   } finally {
     await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }

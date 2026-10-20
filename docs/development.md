@@ -56,3 +56,19 @@ Run `npm audit` and `npm audit --omit=dev`. Do not blindly apply forced major-ve
 The profile picker uses a transient, sandboxed child BrowserWindow because renderer-only popovers cannot overlap the native ChatGPT WebContentsView. The child renders the local `?surface=profile-menu` surface with the parent's theme and zoom, and closes on outside focus, parent movement/resize, or Escape. Only snapshot, profile switching, closing the menu and opening profile management are permitted from this registered child sender. Account cookies stay in the existing per-profile website partitions. The popup keeps at most seven visible profile rows before scrolling; arrow keys, Home/End and name typing move focus. Escape and Tab restore focus to the toolbar trigger.
 
 After changes to the main process, fully quit and restart the source app to activate new IPC commands. Opening another window in an older coordinator does not reload the main process; the renderer falls back to profile management when that coordinator does not recognize the dropdown command.
+
+## Windows taskbar identity
+
+Production windows use `io.github.infiniwire.chatty-dock`, matching the NSIS shortcut identity. Source development, integration tests and update-install tests use separate IDs. Main windows explicitly set the taskbar relaunch icon, display name and quoted command; development relaunch includes the absolute project path. Windows packages ship `resources/icon.ico` for this purpose in addition to the PNG resource.
+
+Pin the installed ChattyDock application, rather than `node_modules/electron/dist/electron.exe`. An old pin can retain Electron's icon and omit the project argument even when the running window displays the correct icon. Replace that pin with the installed Start Menu shortcut after fully exiting an older development coordinator. This does not require deleting icon caches, browser profiles or application data.
+
+## Desktop window layouts
+
+The toolbar layout button immediately follows Downloads. Its native child menu shares the existing menu host with the profile picker, so only one can be open per owner and both can overlap the remote WebContentsView. The layout surface may only read its owner's snapshot, close itself, or apply an enumerated layout to its owner. It cannot switch profiles or manipulate arbitrary windows/bounds.
+
+Presets use Electron display work areas in device-independent pixels, including negative monitor origins and odd dimensions. Fill maximizes the current window; halves and quarters set its outer bounds without reloading ChatGPT. The first arrangement retains the previous bounds, maximized state and minimum size until restoration or process exit. Restore clamps the saved rectangle to a connected display. Fractional-scale native frames can round restored bounds by one DIP.
+
+Snapped windows can be smaller than the ordinary 720 by 500 minimum. Settings accept sizes down to 320 by 240 so quarter-screen positions persist without invalidating profiles/settings; a preset below that size is rejected with an explanation. Fullscreen windows must leave fullscreen before applying a layout. Layouts apply to this window only and do not rearrange other applications.
+
+Deferred authentication bugs are recorded in [Known issues](known-issues.md); never store OAuth query parameters in that log.

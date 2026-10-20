@@ -19,9 +19,16 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { access, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { commandSchema, type Command, type Snapshot, type Panel } from '../shared/model';
+import {
+  commandSchema,
+  type Command,
+  type Snapshot,
+  type Panel,
+  type WindowLayout,
+} from '../shared/model';
 import { HOME, urlKind, isEmbeddedURL, clampBounds } from './policy';
 import { Store } from './store';
+import { layoutBounds, sameBounds } from './window-layout';
 import { Downloads } from './downloads';
 import { Updates } from './updates';
 import { ChatTypography, toolbarHeight } from './typography';
@@ -37,6 +44,14 @@ if (testMode && process.env.DOCK_TEST_DATA)
   app.setPath('userData', path.resolve(process.env.DOCK_TEST_DATA));
 const updateE2e = ['chatty-dock-update-test', 'ChattyDock Update Test'].includes(app.getName());
 app.setName(updateE2e ? 'ChattyDock Update Test' : 'ChattyDock');
+const windowsAppId = updateE2e
+  ? 'io.github.infiniwire.chatty-dock-update-test'
+  : testMode
+    ? 'io.github.infiniwire.chatty-dock.integration-test'
+    : app.isPackaged
+      ? 'io.github.infiniwire.chatty-dock'
+      : 'io.github.infiniwire.chatty-dock.development';
+if (process.platform === 'win32') app.setAppUserModelId(windowsAppId);
 const locked = app.requestSingleInstanceLock();
 if (!locked) app.quit();
 type WindowEntry = {
@@ -50,7 +65,11 @@ type WindowEntry = {
   title: string;
   fontSize: number;
   typography?: ChatTypography;
-  profileMenu?: BrowserWindow;
+  toolbarMenu?: BrowserWindow;
+  toolbarMenuSurface?: 'profile-menu' | 'layout-menu';
+  layoutPreset?: WindowLayout;
+  layoutBounds?: Electron.Rectangle;
+  layoutRestore?: { bounds: Electron.Rectangle; maximized: boolean; minimum: number[] };
 };
 const windows = new Map<number, WindowEntry>();
 const retired = new Map<number, WebContentsView>();
@@ -78,8 +97,12 @@ function focused(): WindowEntry | undefined {
   const window = BrowserWindow.getFocusedWindow();
   return window
     ? (windows.get(window.id) ??
-        [...windows.values()].find((entry) => entry.profileMenu === window))
+        [...windows.values()].find((entry) => entry.toolbarMenu === window))
     : windows.values().next().value;
+}
+function windowTitle(profileId: string): string {
+  const profile = store.settings.profiles.find((item) => item.id === profileId)?.name ?? 'Profile';
+  return `ChattyDock v${app.getVersion()} — ${profile}`;
 }
 function emit(entry: WindowEntry): void {
   if (entry.win.isDestroyed() || entry.win.webContents.isLoadingMainFrame()) return;
@@ -88,7 +111,14 @@ function emit(entry: WindowEntry): void {
     settings: store.settings,
     profileId: entry.profileId,
     panel: entry.panel,
-    profileMenuOpen: !!entry.profileMenu && !entry.profileMenu.isDestroyed(),
+    profileMenuOpen: !!entry.toolbarMenu && entry.toolbarMenuSurface === 'profile-menu',
+    layoutMenuOpen: !!entry.toolbarMenu && entry.toolbarMenuSurface === 'layout-menu',
+    windowLayout: entry.win.isMaximized()
+      ? 'fill'
+      : entry.layoutBounds && sameBounds(entry.win.getBounds(), entry.layoutBounds)
+        ? (entry.layoutPreset ?? null)
+        : null,
+    canRestoreWindowLayout: !!entry.layoutRestore,
     title: entry.title,
     typography: { fontSize: entry.fontSize, toolbarHeight: toolbarHeight(entry.fontSize) },
     loading: entry.loading,
@@ -103,14 +133,12 @@ function emit(entry: WindowEntry): void {
   };
   entry.win.webContents.send('dock:state', snapshot);
   if (
-    entry.profileMenu &&
-    !entry.profileMenu.isDestroyed() &&
-    !entry.profileMenu.webContents.isLoadingMainFrame()
+    entry.toolbarMenu &&
+    !entry.toolbarMenu.isDestroyed() &&
+    !entry.toolbarMenu.webContents.isLoadingMainFrame()
   )
-    entry.profileMenu.webContents.send('dock:state', snapshot);
-  entry.win.setTitle(
-    `ChattyDock — ${store.settings.profiles.find((p) => p.id === entry.profileId)?.name ?? 'Profile'}`,
-  );
+    entry.toolbarMenu.webContents.send('dock:state', snapshot);
+  entry.win.setTitle(windowTitle(entry.profileId));
   entry.view.setVisible(entry.panel === 'none' && !entry.error);
 }
 function changed(): void {
@@ -134,10 +162,12 @@ async function openExternal(raw: string): Promise<void> {
     throw new Error('This link cannot be opened.');
   await shell.openExternal(raw);
 }
-function closeProfileMenu(entry: WindowEntry, focus?: 'trigger' | 'parent'): void {
-  const menu = entry.profileMenu;
+function closeToolbarMenu(entry: WindowEntry, focus?: 'trigger' | 'parent'): void {
+  const menu = entry.toolbarMenu;
   if (!menu || menu.isDestroyed()) return;
-  entry.profileMenu = undefined;
+  const surface = entry.toolbarMenuSurface;
+  entry.toolbarMenu = undefined;
+  entry.toolbarMenuSurface = undefined;
   menu.close();
   emit(entry);
   if (focus && !entry.win.isDestroyed()) {
@@ -145,22 +175,33 @@ function closeProfileMenu(entry: WindowEntry, focus?: 'trigger' | 'parent'): voi
     if (focus === 'trigger') {
       entry.win.webContents.focus();
       void entry.win.webContents
-        .executeJavaScript('document.querySelector("[data-profile-trigger]")?.focus()')
+        .executeJavaScript(
+          surface === 'layout-menu'
+            ? 'document.querySelector("[data-layout-trigger]")?.focus()'
+            : 'document.querySelector("[data-profile-trigger]")?.focus()',
+        )
         .catch(() => {});
     } else if (entry.panel === 'none') entry.view.webContents.focus();
     else entry.win.webContents.focus();
   }
 }
-async function openProfileMenu(
+async function openToolbarMenu(
   entry: WindowEntry,
   anchor: { x: number; y: number; width: number; height: number },
+  surface: 'profile-menu' | 'layout-menu' = 'profile-menu',
 ): Promise<void> {
-  closeProfileMenu(entry);
+  closeToolbarMenu(entry);
   const zoom = entry.win.webContents.getZoomFactor();
   const content = entry.win.getContentBounds();
   const work = screen.getDisplayMatching(entry.win.getBounds()).workArea;
-  const width = Math.min(Math.round(272 * zoom), work.width - 16);
-  const desiredHeight = Math.round((100 + Math.min(7, store.settings.profiles.length) * 46) * zoom);
+  const width = Math.min(
+    Math.round((surface === 'layout-menu' ? 300 : 272) * zoom),
+    work.width - 16,
+  );
+  const desiredHeight = Math.round(
+    (surface === 'layout-menu' ? 300 : 100 + Math.min(7, store.settings.profiles.length) * 46) *
+      zoom,
+  );
   const bottom = Math.round(content.y + (anchor.y + anchor.height) * zoom + 7);
   const height = Math.min(desiredHeight, work.height - 16);
   const x = Math.max(
@@ -206,7 +247,8 @@ async function openProfileMenu(
       webSecurity: true,
     },
   });
-  entry.profileMenu = menu;
+  entry.toolbarMenu = menu;
+  entry.toolbarMenuSurface = surface;
   menu.setMenu(null);
   menu.webContents.setZoomFactor(zoom);
   menu.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -219,18 +261,19 @@ async function openProfileMenu(
     // Let a click on the parent trigger close the menu before processing blur.
     if (blurTimer) clearTimeout(blurTimer);
     blurTimer = setTimeout(() => {
-      if (entry.profileMenu === menu && !menu.isFocused()) closeProfileMenu(entry);
+      if (entry.toolbarMenu === menu && !menu.isFocused()) closeToolbarMenu(entry);
     }, 120);
   });
   menu.on('closed', () => {
     if (blurTimer) clearTimeout(blurTimer);
-    if (entry.profileMenu === menu) {
-      entry.profileMenu = undefined;
+    if (entry.toolbarMenu === menu) {
+      entry.toolbarMenu = undefined;
+      entry.toolbarMenuSurface = undefined;
       emit(entry);
     }
   });
   menu.once('ready-to-show', () => {
-    if (entry.profileMenu !== menu || entry.win.isDestroyed()) {
+    if (entry.toolbarMenu !== menu || entry.win.isDestroyed()) {
       menu.close();
       return;
     }
@@ -240,10 +283,10 @@ async function openProfileMenu(
   });
   try {
     const url = new URL(devOrigin || `${uiOrigin}/index.html`);
-    url.searchParams.set('surface', 'profile-menu');
+    url.searchParams.set('surface', surface);
     await menu.loadURL(url.href);
   } catch (error) {
-    if (entry.profileMenu === menu) closeProfileMenu(entry);
+    if (entry.toolbarMenu === menu) closeToolbarMenu(entry);
     throw error;
   }
   emit(entry);
@@ -437,16 +480,18 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
   const area = saved
     ? screen.getDisplayMatching(saved).workArea
     : screen.getPrimaryDisplay().workArea;
+  const restored = clampBounds(saved, area);
   const win = new BrowserWindow({
-    ...clampBounds(saved, area),
-    minWidth: 720,
-    minHeight: 500,
+    ...restored,
+    title: windowTitle(profileId),
+    minWidth: Math.min(720, restored.width),
+    minHeight: Math.min(500, restored.height),
     show: false,
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#fcfcfc',
     icon: app.isPackaged
-      ? path.join(process.resourcesPath, 'icon.png')
-      : path.join(__dirname, '../../build/icon.png'),
+      ? path.join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon.png')
+      : path.join(__dirname, '../../build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -455,6 +500,17 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
       webSecurity: true,
     },
   });
+  if (process.platform === 'win32') {
+    win.setAppDetails({
+      appId: windowsAppId,
+      appIconPath: app.isPackaged
+        ? path.join(process.resourcesPath, 'icon.ico')
+        : path.join(__dirname, '../../build/icon.ico'),
+      appIconIndex: 0,
+      relaunchCommand: `"${process.execPath}"${app.isPackaged ? '' : ` "${app.getAppPath()}"`}`,
+      relaunchDisplayName: app.isPackaged ? app.getName() : `${app.getName()} (Development)`,
+    });
+  }
   const entry = {
     win,
     profileId,
@@ -470,21 +526,22 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
   windows.set(win.id, entry);
   attachView(entry);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.on('page-title-updated', (event) => event.preventDefault());
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.on('did-finish-load', () => emit(entry));
   win.on('resize', () => {
-    closeProfileMenu(entry);
+    closeToolbarMenu(entry);
     resize(entry);
     saveWindow(entry);
   });
   win.on('move', () => {
-    closeProfileMenu(entry);
+    closeToolbarMenu(entry);
     saveWindow(entry);
   });
   win.on('maximize', () => saveWindow(entry));
   win.on('unmaximize', () => saveWindow(entry));
   win.on('close', () => {
-    closeProfileMenu(entry);
+    closeToolbarMenu(entry);
     if (downloads.hasActive(undefined, win.id)) win.contentView.removeChildView(entry.view);
   });
   win.on('closed', () => {
@@ -515,7 +572,7 @@ function saveWindow(entry: WindowEntry): void {
 function localSender(event: IpcMainInvokeEvent): WindowEntry | undefined {
   const entry = [...windows.values()].find(
     (item) =>
-      item.win.webContents === event.sender || item.profileMenu?.webContents === event.sender,
+      item.win.webContents === event.sender || item.toolbarMenu?.webContents === event.sender,
   );
   if (!entry || event.senderFrame !== event.sender.mainFrame) return;
   try {
@@ -534,7 +591,7 @@ function localSender(event: IpcMainInvokeEvent): WindowEntry | undefined {
 async function execute(
   entry: WindowEntry,
   command: Command,
-  fromProfileMenu = false,
+  fromToolbarMenu = false,
 ): Promise<unknown> {
   const contents = entry.view.webContents;
   switch (command.type) {
@@ -542,15 +599,69 @@ async function execute(
       emit(entry);
       break;
     case 'profile-menu':
-      if (command.action === 'close')
-        closeProfileMenu(entry, command.restoreFocus ? 'trigger' : 'parent');
-      else {
+      if (command.action === 'close') {
+        if (entry.toolbarMenuSurface === 'profile-menu')
+          closeToolbarMenu(entry, command.restoreFocus ? 'trigger' : 'parent');
+      } else {
         if (!command.anchor) throw new Error('A menu anchor is required.');
-        await openProfileMenu(entry, command.anchor);
+        await openToolbarMenu(entry, command.anchor);
       }
       break;
+    case 'layout-menu':
+      if (command.action === 'close') {
+        if (entry.toolbarMenuSurface === 'layout-menu')
+          closeToolbarMenu(entry, command.restoreFocus ? 'trigger' : 'parent');
+      } else {
+        if (!command.anchor) throw new Error('A menu anchor is required.');
+        await openToolbarMenu(entry, command.anchor, 'layout-menu');
+      }
+      break;
+    case 'window-layout': {
+      const win = entry.win;
+      if (win.isFullScreen()) throw new Error('Exit fullscreen before arranging this window.');
+      if (command.layout === 'restore') {
+        const previous = entry.layoutRestore;
+        if (!previous) break;
+        closeToolbarMenu(entry, 'parent');
+        if (win.isMaximized()) win.unmaximize();
+        const area = screen.getDisplayMatching(previous.bounds).workArea;
+        const bounds = clampBounds(previous.bounds, area);
+        win.setMinimumSize(
+          Math.min(previous.minimum[0], bounds.width),
+          Math.min(previous.minimum[1], bounds.height),
+        );
+        win.setBounds(bounds);
+        if (previous.maximized) win.maximize();
+        entry.layoutRestore = undefined;
+        entry.layoutPreset = undefined;
+        entry.layoutBounds = undefined;
+      } else {
+        const bounds = layoutBounds(
+          command.layout,
+          screen.getDisplayMatching(win.getBounds()).workArea,
+        );
+        if (bounds.width < 320 || bounds.height < 240)
+          throw new Error('This layout needs a larger screen. Try a half-screen layout.');
+        entry.layoutRestore ??= {
+          bounds: win.isMaximized() ? win.getNormalBounds() : win.getBounds(),
+          maximized: win.isMaximized(),
+          minimum: win.getMinimumSize(),
+        };
+        closeToolbarMenu(entry, 'parent');
+        entry.layoutPreset = command.layout;
+        entry.layoutBounds = command.layout === 'fill' ? undefined : bounds;
+        win.setMinimumSize(Math.min(720, bounds.width), Math.min(500, bounds.height));
+        if (command.layout === 'fill') win.maximize();
+        else {
+          if (win.isMaximized()) win.unmaximize();
+          win.setBounds(bounds);
+        }
+      }
+      saveWindow(entry);
+      break;
+    }
     case 'panel':
-      if (!fromProfileMenu) closeProfileMenu(entry);
+      if (!fromToolbarMenu) closeToolbarMenu(entry);
       entry.panel = command.panel;
       break;
     case 'new-window':
@@ -909,15 +1020,17 @@ if (locked)
         if (!entry) return { ok: false, error: 'Untrusted IPC sender.' };
         const parsed = commandSchema.safeParse(raw);
         if (!parsed.success) return { ok: false, error: 'Invalid command.' };
-        if (entry.profileMenu?.webContents === event.sender) {
+        if (entry.toolbarMenu?.webContents === event.sender) {
           const command = parsed.data;
           const allowed =
             command.type === 'snapshot' ||
-            command.type === 'profile-switch' ||
-            (command.type === 'profile-menu' && command.action === 'close') ||
-            (command.type === 'panel' && command.panel === 'profiles');
-          if (!allowed)
-            return { ok: false, error: 'This command is not available in the profile menu.' };
+            (entry.toolbarMenuSurface === 'profile-menu'
+              ? command.type === 'profile-switch' ||
+                (command.type === 'profile-menu' && command.action === 'close') ||
+                (command.type === 'panel' && command.panel === 'profiles')
+              : command.type === 'window-layout' ||
+                (command.type === 'layout-menu' && command.action === 'close'));
+          if (!allowed) return { ok: false, error: 'This command is not available in this menu.' };
         }
         try {
           return {
@@ -925,7 +1038,7 @@ if (locked)
             value: await execute(
               entry,
               parsed.data,
-              entry.profileMenu?.webContents === event.sender,
+              entry.toolbarMenu?.webContents === event.sender,
             ),
           };
         } catch (error) {

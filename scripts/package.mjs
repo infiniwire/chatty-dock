@@ -51,7 +51,10 @@ const config = {
     : {}),
   directories: { output: process.env.DOCK_OUTPUT_DIR || 'dist', buildResources: 'build' },
   files: ['out/**', 'package.json', '!**/*.map'],
-  extraResources: [{ from: 'build/icon.png', to: 'icon.png' }],
+  extraResources: [
+    { from: 'build/icon.png', to: 'icon.png' },
+    ...(mac ? [] : [{ from: 'build/icon.ico', to: 'icon.ico' }]),
+  ],
   asar: true,
   artifactName: 'ChattyDock-${version}-${os}-${arch}.${ext}',
   forceCodeSigning: signed,
