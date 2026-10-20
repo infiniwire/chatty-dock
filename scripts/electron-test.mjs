@@ -845,6 +845,19 @@ try {
         },
         { id, existingWindows },
       );
+      // A new window starts its homepage independently of the local toolbar.
+      // Wait for that navigation to settle before replacing it with this fixture.
+      await expect
+        .poll(() =>
+          application.evaluate(
+            ({ webContents }, { id, origin }) => {
+              const contents = webContents.fromId(id);
+              return contents.getURL().startsWith(`${origin}/`) && !contents.isLoading();
+            },
+            { id: sibling.contents, origin: fixture.origin },
+          ),
+        )
+        .toBe(true);
       await application.evaluate(
         async ({ webContents }, { id, origin }) => {
           await webContents.fromId(id).loadURL(`${origin}/surface-fixture-chat`);
