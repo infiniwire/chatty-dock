@@ -318,10 +318,9 @@ export function SettingsPanel({
               </div>
             </section>
             <section className="settings-section" aria-labelledby="performance-heading">
-              <h2 id="performance-heading">Performance</h2>
+              <h2 id="performance-heading">Diagnostics</h2>
               <p>
-                Inspect memory and CPU usage when you need to. Long conversations are rendered by
-                the ChatGPT website.
+                Inspect memory and CPU usage, or record navigation domains to troubleshoot sign-in.
               </p>
               <button className="action-button" onClick={() => panel('diagnostics')}>
                 <Activity aria-hidden="true" /> Open diagnostics

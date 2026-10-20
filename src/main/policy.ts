@@ -6,6 +6,8 @@ const authHosts = new Set([
   'auth.openai.com',
   'auth0.openai.com',
   'accounts.google.com',
+  // Google sign-in can visit this exact account bridge after phone verification.
+  'accounts.youtube.com',
   'appleid.apple.com',
   'account.apple.com',
   'login.microsoftonline.com',

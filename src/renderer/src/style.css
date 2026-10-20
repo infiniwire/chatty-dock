@@ -314,7 +314,38 @@ button.primary:hover {
 }
 .nav {
   display: flex;
+  align-items: center;
   gap: 2px;
+}
+.window-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: 0 8px 0 0;
+  border: 1px solid rgb(0 0 0 / 15%);
+  border-radius: 50%;
+  color: #171717;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  user-select: none;
+}
+.window-number > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  stroke: none;
+}
+.window-number text {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 .nav button {
   border-color: transparent;
@@ -1788,4 +1819,17 @@ td {
   line-height: 1.4;
   max-height: 52px;
   overflow: auto;
+}
+.sign-in-diagnostics {
+  margin-bottom: 28px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.sign-in-diagnostics h2 {
+  font-size: 16px;
+}
+.sign-in-diagnostics .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

@@ -51,6 +51,33 @@ describe('navigation boundaries', () => {
     expect(isEmbeddedURL('https://accounts.google.com/signin')).toBe(true);
     expect(isEmbeddedURL('javascript:alert(1)')).toBe(false);
   });
+  it('keeps the Google consent endpoint embedded without admitting lookalike domains', () => {
+    expect(
+      urlKind('https://accounts.google.com/signin/oauth/legacy/consent?synthetic=fixture'),
+    ).toBe('auth');
+    expect(isEmbeddedURL('https://accounts.google.com/signin/oauth/legacy/consent')).toBe(true);
+    expect(
+      isEmbeddedURL('https://accounts.google.com.attacker.example/signin/oauth/legacy/consent'),
+    ).toBe(false);
+  });
+  it('retains the observed Google account bridge without allowing YouTube browsing', () => {
+    expect(urlKind('https://accounts.youtube.com/accounts/SetSID?synthetic=fixture')).toBe('auth');
+    expect(isEmbeddedURL('https://accounts.youtube.com/')).toBe(true);
+    for (const raw of [
+      'https://youtube.com/',
+      'https://www.youtube.com/',
+      'https://m.youtube.com/',
+      'https://youtu.be/fixture',
+      'https://accounts.youtube.com.attacker.example/',
+      'https://accounts.youtube.com./',
+      'https://accounts.youtube.com:8443/',
+      'http://accounts.youtube.com/',
+    ]) {
+      expect(urlKind(raw)).toBe('external');
+      expect(isEmbeddedURL(raw)).toBe(false);
+    }
+    expect(urlKind('https://user:password@accounts.youtube.com/')).toBe('blocked');
+  });
 });
 describe('download destinations', () => {
   it.each(['../../evil.txt', 'C:\\tmp\\evil.txt', 'CON', 'bad?.txt'])('sanitizes %s', (name) => {

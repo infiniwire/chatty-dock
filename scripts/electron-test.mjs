@@ -142,6 +142,105 @@ try {
   const winId = await application.evaluate(
     ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].id,
   );
+  await check(
+    'stable window numbers appear in titles and rainbow navigation badges without counting menus',
+    async () => {
+      const colors = ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet'];
+      expect(initial.windowNumber).toBe(1);
+      await expect(page.getByRole('img', { name: 'Window 1, Red', exact: true })).toBeVisible();
+      const title = () =>
+        application.evaluate(({ BrowserWindow }, id) => BrowserWindow.fromId(id).getTitle(), winId);
+      expect(await title()).toMatch(/ — Personal - 1$/);
+      await page.getByRole('button', { name: 'Active login profile' }).click();
+      await expect.poll(async () => (await snapshot(page)).profileMenuOpen).toBe(true);
+      await expect
+        .poll(() =>
+          application
+            .context()
+            .pages()
+            .some((candidate) => candidate.url().includes('surface=profile-menu')),
+        )
+        .toBe(true);
+      const profileMenu = application
+        .context()
+        .pages()
+        .find((candidate) => candidate.url().includes('surface=profile-menu'));
+      await expect(profileMenu.getByRole('menu')).toBeVisible();
+      await command(page, { type: 'profile-menu', action: 'close' });
+      await expect.poll(() => profileMenu.isClosed()).toBe(true);
+      await expect(page.locator('.toast')).toHaveCount(0);
+      const records = [];
+      await fs.mkdir(path.join(output, 'window-numbers'), { recursive: true });
+      for (let number = 2; number <= 9; number++) {
+        await command(page, { type: 'new-window', profileId });
+        const sibling = await application.evaluate(({ BrowserWindow }, keep) => {
+          const win = BrowserWindow.getAllWindows().find(
+            (w) =>
+              w.id !== keep &&
+              !w.getParentWindow() &&
+              w.webContents.getURL().startsWith('dock://ui/'),
+          );
+          return { id: win.id, contents: win.webContents.id, title: win.getTitle() };
+        }, winId);
+        await expect
+          .poll(() => js(sibling.contents, 'document.querySelector(".window-number")?.textContent'))
+          .toBe(String(number));
+        const badge = await js(
+          sibling.contents,
+          `(() => {const badge=document.querySelector('.window-number');return {number:badge.textContent,color:badge.dataset.windowColor,width:badge.getBoundingClientRect().width,height:badge.getBoundingClientRect().height};})()`,
+        );
+        expect(badge).toMatchObject({
+          number: String(number),
+          color: colors[(number - 1) % 7],
+          width: 24,
+          height: 24,
+        });
+        expect(sibling.title).toMatch(new RegExp(` — Personal - ${number}$`));
+        expect((await snapshot(page)).windowNumber).toBe(1);
+        records.push(badge);
+        if (number === 2) {
+          for (const theme of ['light', 'dark']) {
+            await command(page, { type: 'settings', theme });
+            await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+            await page
+              .locator('.chrome')
+              .screenshot({ path: path.join(output, 'window-numbers', `window-1-${theme}.png`) });
+            for (const candidate of application.context().pages()) {
+              if (candidate === page || !candidate.url().startsWith('dock://ui/')) continue;
+              if (
+                (await candidate
+                  .locator('.window-number')
+                  .textContent()
+                  .catch(() => '')) === '2'
+              )
+                await candidate.locator('.chrome').screenshot({
+                  path: path.join(output, 'window-numbers', `window-2-${theme}.png`),
+                });
+            }
+          }
+          await command(page, { type: 'panel', panel: 'downloads' });
+          await expect(page.getByRole('img', { name: 'Window 1, Red', exact: true })).toBeVisible();
+          await expect(
+            page.getByRole('navigation', { name: 'Panel navigation' }).getByRole('button'),
+          ).toHaveCount(1);
+          await command(page, { type: 'panel', panel: 'none' });
+        }
+        await application.evaluate(
+          ({ BrowserWindow }, id) => BrowserWindow.fromId(id).close(),
+          sibling.id,
+        );
+      }
+      await command(page, { type: 'profile-rename', id: profileId, name: 'Numbered profile' });
+      await expect.poll(title).toMatch(/ — Numbered profile - 1$/);
+      await command(page, { type: 'profile-rename', id: profileId, name: 'Personal' });
+      await expect.poll(title).toMatch(/ — Personal - 1$/);
+      await command(page, { type: 'settings', theme: initial.settings.theme });
+      await fs.writeFile(
+        path.join(output, 'window-numbers', 'verification.json'),
+        JSON.stringify({ first: 1, records, passed: true }, null, 2),
+      );
+    },
+  );
   if (process.platform === 'win32') {
     await check(
       'Windows taskbar relaunch identity, icon and shortcut survive a native round trip',
@@ -649,13 +748,14 @@ try {
         .poll(() =>
           application.evaluate(
             ({ BrowserWindow }) =>
-              BrowserWindow.getAllWindows().filter((w) => w.getTitle().endsWith('Work')).length,
+              BrowserWindow.getAllWindows().filter((w) => / — Work - \d+$/.test(w.getTitle()))
+                .length,
           ),
         )
         .toBe(1);
       const isolated = await application.evaluate(
         ({ BrowserWindow }) =>
-          BrowserWindow.getAllWindows().find((w) => w.getTitle().endsWith('Work')).contentView
+          BrowserWindow.getAllWindows().find((w) => / — Work - \d+$/.test(w.getTitle())).contentView
             .children[0].webContents.id,
       );
       await waitRemote(isolated);
@@ -667,6 +767,144 @@ try {
       );
       await command(page, { type: 'profile-rename', id: other.id, name: 'Office' });
       expect(await js(isolated, 'localStorage.getItem("sentinel")')).toBe('work');
+    },
+  );
+  await check(
+    'shared login keeps independent app modes through preference broadcasts, focus and server-rendered reloads',
+    async () => {
+      // Negative control: the website's cookie/broadcast mechanism really does
+      // navigate an unpinned sibling. Only synthetic loopback documents run here.
+      const controls = await application.evaluate(
+        async ({ BrowserWindow, webContents }, { id, origin }) => {
+          const ses = webContents.fromId(id).session;
+          await ses.cookies.remove(origin, 'codex_app_mode');
+          const options = {
+            show: false,
+            webPreferences: {
+              session: ses,
+              sandbox: true,
+              contextIsolation: true,
+              nodeIntegration: false,
+            },
+          };
+          const sender = new BrowserWindow(options);
+          const receiver = new BrowserWindow(options);
+          await Promise.all([
+            sender.loadURL(`${origin}/surface-fixture-chat`),
+            receiver.loadURL(`${origin}/surface-fixture-chat`),
+          ]);
+          return {
+            windows: [sender.id, receiver.id],
+            sender: sender.webContents.id,
+            receiver: receiver.webContents.id,
+          };
+        },
+        { id, origin: fixture.origin },
+      );
+      try {
+        await js(controls.sender, 'window.surfaceFixture.select("STEPS_EXECUTION");true');
+        await expect
+          .poll(() => js(controls.receiver, 'location.pathname'))
+          .toBe('/surface-fixture-codex');
+      } finally {
+        await application.evaluate(
+          async ({ BrowserWindow, webContents }, { controls, id, origin }) => {
+            for (const windowId of controls.windows) BrowserWindow.fromId(windowId)?.close();
+            await webContents.fromId(id).session.cookies.remove(origin, 'codex_app_mode');
+          },
+          { controls, id, origin: fixture.origin },
+        );
+      }
+      await application.evaluate(
+        async ({ webContents }, { id, origin }) => {
+          await webContents.fromId(id).session.cookies.set({
+            url: origin,
+            name: 'dock-private-auth',
+            value: 'fixture-secret',
+            httpOnly: true,
+          });
+          await webContents.fromId(id).loadURL(`${origin}/surface-fixture-chat`);
+        },
+        { id, origin: fixture.origin },
+      );
+      const existingWindows = await application.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().map((w) => w.id),
+      );
+      await command(page, { type: 'new-window', profileId });
+      const sibling = await application.evaluate(
+        ({ BrowserWindow, webContents }, { id, existingWindows }) => {
+          const original = webContents.fromId(id);
+          const win = BrowserWindow.getAllWindows().find(
+            (w) =>
+              !existingWindows.includes(w.id) &&
+              w.contentView.children[0]?.webContents !== original &&
+              w.contentView.children[0]?.webContents.session === original.session &&
+              !w.getParentWindow(),
+          );
+          return { id: win.id, contents: win.contentView.children[0].webContents.id };
+        },
+        { id, existingWindows },
+      );
+      await application.evaluate(
+        async ({ webContents }, { id, origin }) => {
+          await webContents.fromId(id).loadURL(`${origin}/surface-fixture-chat`);
+        },
+        { id: sibling.contents, origin: fixture.origin },
+      );
+      try {
+        await expect
+          .poll(() => js(sibling.contents, 'typeof window.surfaceFixture'))
+          .toBe('object');
+        await js(id, 'document.querySelector("#choose-codex").click();true');
+        await expect.poll(() => js(id, 'location.pathname')).toBe('/surface-fixture-codex');
+        // Await a same-channel round trip so this checks the receiving window,
+        // rather than passing before its preference event has been delivered.
+        await js(
+          sibling.contents,
+          `window.surfaceFixtureBarrier=new Promise(resolve=>{const channel=new BroadcastChannel('codex:preference-cookies');channel.onmessage=e=>{if(e.data==='fixture-barrier'){channel.close();resolve(true);}};});true`,
+        );
+        await js(
+          id,
+          `(()=>{const channel=new BroadcastChannel('codex:preference-cookies');channel.postMessage('fixture-barrier');channel.close();})()`,
+        );
+        await js(sibling.contents, 'window.surfaceFixtureBarrier');
+        await js(sibling.contents, 'window.dispatchEvent(new Event("focus"));true');
+        expect(await js(sibling.contents, 'location.pathname')).toBe('/surface-fixture-chat');
+        expect(await js(sibling.contents, 'window.surfaceFixture.currentMode()')).toBe(
+          'STEPS_PROSE',
+        );
+        await js(sibling.contents, 'window.surfaceFixture.select("STEPS_PROSE");true');
+        await application.evaluate(async ({ webContents }, id) => {
+          const contents = webContents.fromId(id);
+          const loaded = new Promise((resolve) => contents.once('did-finish-load', resolve));
+          contents.reload();
+          await loaded;
+        }, id);
+        await expect
+          .poll(() => js(id, 'document.querySelector("#server-mode")?.textContent'))
+          .toBe('STEPS_EXECUTION');
+        expect(await js(id, 'document.querySelector("#server-auth").textContent')).toBe('true');
+        expect(await js(id, 'document.cookie')).not.toContain('dock-private-auth');
+        await js(id, 'window.dispatchEvent(new Event("focus"));true');
+        expect(await js(id, 'location.pathname')).toBe('/surface-fixture-codex');
+        expect(await js(sibling.contents, 'location.pathname')).toBe('/surface-fixture-chat');
+        expect(
+          await js(sibling.contents, 'document.querySelector("#server-auth").textContent'),
+        ).toBe('true');
+        await js(id, 'document.cookie="dock-shared-check=valid; Path=/";true');
+        expect(await js(sibling.contents, 'document.cookie')).toContain('dock-shared-check=valid');
+        expect(await js(id, '({node:typeof process, bridge:typeof window.dock})')).toEqual({
+          node: 'undefined',
+          bridge: 'undefined',
+        });
+      } finally {
+        await application.evaluate(
+          ({ BrowserWindow }, id) => BrowserWindow.fromId(id).close(),
+          sibling.id,
+        );
+        await command(page, { type: 'navigate', action: 'home' });
+        await waitRemote(id);
+      }
     },
   );
   await check('switching profiles replaces the remote view and keeps both sessions', async () => {
@@ -737,7 +975,7 @@ try {
       const sharedWindow = await application.evaluate(
         ({ BrowserWindow }, winId) =>
           BrowserWindow.getAllWindows().find(
-            (win) => win.id !== winId && win.getTitle().endsWith('Personal'),
+            (win) => win.id !== winId && / — Personal - \d+$/.test(win.getTitle()),
           ).webContents.id,
         winId,
       );
@@ -791,6 +1029,152 @@ try {
     ).toBe(false);
   });
   await check(
+    'Google account bridge redirects retain the initiating session, POST and cookies without browser dispatch',
+    async () => {
+      const originalCalls = await application.evaluate(({ app }) => app.__dockExternalCalls.length);
+      // Replace HTTPS responses only in this synthetic profile. No Google/OpenAI
+      // network traffic or real authorization parameters are used by this check.
+      await application.evaluate(async ({ app, webContents, session }, id) => {
+        const ses = webContents.fromId(id).session;
+        app.__dockAuthFixture = [];
+        await ses.cookies.set({
+          url: 'https://accounts.google.com',
+          name: 'dock-google-fixture',
+          value: 'valid',
+          secure: true,
+        });
+        await ses.cookies.set({
+          url: 'https://accounts.youtube.com',
+          name: 'dock-bridge-fixture',
+          value: 'valid',
+          secure: true,
+        });
+        const isolated = session.fromPartition('dock-auth-fixture-isolated');
+        if ((await isolated.cookies.get({ name: 'dock-google-fixture' })).length)
+          throw new Error('Fixture session is not isolated');
+        ses.protocol.handle('https', async (request) => {
+          const url = new URL(request.url);
+          const body = request.method === 'POST' ? await request.text() : '';
+          app.__dockAuthFixture.push({
+            host: url.hostname,
+            path: url.pathname,
+            method: request.method,
+            body,
+          });
+          if (url.hostname === 'accounts.google.com' && url.pathname === '/dock-auth-start')
+            return new Response(
+              '<!doctype html><form method="post" action="https://accounts.google.com/dock-auth-post"><input name="fixture" value="synthetic-only"><button>Continue fixture</button></form>',
+              { headers: { 'content-type': 'text/html' } },
+            );
+          const next = {
+            'accounts.google.com/dock-auth-post': 'https://accounts.youtube.com/dock-auth-bridge',
+            'accounts.youtube.com/dock-auth-bridge':
+              'https://accounts.google.com/dock-auth-consent',
+            'accounts.google.com/dock-auth-consent': 'https://auth.openai.com/dock-auth-callback',
+            'auth.openai.com/dock-auth-callback': 'https://chatgpt.com/dock-auth-done',
+          }[url.hostname + url.pathname];
+          if (next) return new Response(null, { status: 303, headers: { location: next } });
+          if (url.hostname === 'chatgpt.com' && url.pathname === '/dock-auth-done')
+            return new Response('<!doctype html><h1>Synthetic authentication complete</h1>', {
+              headers: { 'content-type': 'text/html' },
+            });
+          return new Response('Unexpected synthetic authentication request', { status: 404 });
+        });
+      }, id);
+      try {
+        await command(page, { type: 'sign-in-trace', action: 'start' });
+        await application.evaluate(async ({ webContents }, id) => {
+          await webContents.fromId(id).loadURL('https://accounts.google.com/dock-auth-start');
+        }, id);
+        expect(await js(id, 'document.cookie')).toContain('dock-google-fixture=valid');
+        await js(id, 'document.querySelector("form").submit();true');
+        await expect.poll(() => js(id, 'location.href')).toBe('https://chatgpt.com/dock-auth-done');
+        expect(await js(id, 'document.body.textContent')).toContain(
+          'Synthetic authentication complete',
+        );
+        // Popups must retain the same session and survive this bridge as well.
+        await js(id, 'window.open("https://accounts.google.com/dock-auth-start");true');
+        await expect
+          .poll(() =>
+            application.evaluate(({ BrowserWindow }) =>
+              BrowserWindow.getAllWindows().some(
+                (w) => w.webContents.getURL() === 'https://accounts.google.com/dock-auth-start',
+              ),
+            ),
+          )
+          .toBe(true);
+        const popup = await application.evaluate(({ BrowserWindow, webContents }, id) => {
+          const win = BrowserWindow.getAllWindows().find(
+            (w) => w.webContents.getURL() === 'https://accounts.google.com/dock-auth-start',
+          );
+          if (win.webContents.session !== webContents.fromId(id).session)
+            throw new Error('Authentication popup lost its session');
+          return win.webContents.id;
+        }, id);
+        expect(await js(popup, 'document.cookie')).toContain('dock-google-fixture=valid');
+        await js(popup, 'document.querySelector("form").submit();true');
+        await expect
+          .poll(() => js(popup, 'location.href'))
+          .toBe('https://chatgpt.com/dock-auth-done');
+        const requests = await application.evaluate(({ app }) => app.__dockAuthFixture);
+        await fs.writeFile(
+          path.join(output, 'auth-bridge-fixture.json'),
+          JSON.stringify(requests, null, 2),
+        );
+        const post = requests.filter((r) => r.path === '/dock-auth-post');
+        expect(post).toHaveLength(2);
+        expect(post.every((r) => r.method === 'POST' && r.body === 'fixture=synthetic-only')).toBe(
+          true,
+        );
+        const bridge = requests.filter((r) => r.host === 'accounts.youtube.com');
+        expect(bridge).toHaveLength(2);
+        expect(bridge.every((r) => r.method === 'GET')).toBe(true);
+        // The protocol fixture's Request does not expose a Cookie header.
+        // Check Chromium's cookie store plus document.cookie in both windows;
+        // actual provider-server cookie transmission remains a manual check.
+        const cookieState = await application.evaluate(async ({ webContents, session }, id) => {
+          const ses = webContents.fromId(id).session;
+          return {
+            google: (
+              await ses.cookies.get({
+                url: 'https://accounts.google.com',
+                name: 'dock-google-fixture',
+              })
+            ).map((c) => c.value),
+            bridge: (
+              await ses.cookies.get({
+                url: 'https://accounts.youtube.com',
+                name: 'dock-bridge-fixture',
+              })
+            ).map((c) => c.value),
+            isolated: (await session.fromPartition('dock-auth-fixture-isolated').cookies.get({}))
+              .length,
+          };
+        }, id);
+        expect(cookieState).toEqual({ google: ['valid'], bridge: ['valid'], isolated: 0 });
+        expect(await application.evaluate(({ app }) => app.__dockExternalCalls.length)).toBe(
+          originalCalls,
+        );
+        await command(page, { type: 'sign-in-trace', action: 'copy' });
+        const trace = JSON.parse(
+          await application.evaluate(({ clipboard }) => clipboard.readText()),
+        );
+        const bridgeTrace = trace.events.filter((e) => e.to === 'https://accounts.youtube.com');
+        expect(bridgeTrace.length).toBeGreaterThan(0);
+        expect(bridgeTrace.every((e) => e.kind === 'auth' && e.action === 'embedded')).toBe(true);
+        await application.evaluate(({ webContents }, id) => webContents.fromId(id).close(), popup);
+      } finally {
+        await command(page, { type: 'sign-in-trace', action: 'clear' });
+        await application.evaluate(
+          ({ webContents }, id) => webContents.fromId(id).session.protocol.unhandle('https'),
+          id,
+        );
+        await command(page, { type: 'navigate', action: 'home' });
+        await waitRemote(id);
+      }
+    },
+  );
+  await check(
     'external links, scripted navigation, popups and redirects use the OS browser',
     async () => {
       const remotePage = await viewPage(id);
@@ -812,6 +1196,12 @@ try {
       });
       await routed('https://x.com/dock-blank', () =>
         js(id, 'window.open("https://x.com/dock-blank");true'),
+      );
+      await routed('https://www.youtube.com/watch?v=dock-fixture', () =>
+        js(id, 'window.open("https://www.youtube.com/watch?v=dock-fixture");true'),
+      );
+      await routed('https://accounts.youtube.com.attacker.example/', () =>
+        js(id, 'location.assign("https://accounts.youtube.com.attacker.example/");true'),
       );
       await routed('https://x.com/dock-target-blank', async () => {
         await js(
@@ -896,6 +1286,63 @@ try {
       expect(externalFixture.requestCount).toBe(1);
       expect(await calls()).toEqual(expected);
       expect((await snapshot(page)).error).toBeNull();
+      await command(page, { type: 'navigate', action: 'home' });
+      await waitRemote(id);
+    },
+  );
+  await check(
+    'opt-in sign-in diagnostics capture browser dispatch without authorization data and stay per-window',
+    async () => {
+      await command(page, { type: 'panel', panel: 'diagnostics' });
+      await expect(page.getByRole('button', { name: 'Copy sign-in report' })).toBeDisabled();
+      await page.getByRole('button', { name: 'Start recording', exact: true }).click();
+      await expect.poll(async () => (await snapshot(page)).panel).toBe('none');
+      const sensitiveURL =
+        'https://auth-bridge.example/PRIVATE_PATH?state=PRIVATE_QUERY#PRIVATE_FRAGMENT';
+      await js(id, `window.open(${JSON.stringify(sensitiveURL)});true`);
+      await application.evaluate(
+        async ({ webContents }, { id, url }) => {
+          await webContents
+            .fromId(id)
+            .loadURL(url)
+            .catch(() => {});
+        },
+        { id, url: sensitiveURL },
+      );
+      await command(page, { type: 'panel', panel: 'diagnostics' });
+      await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
+      await page.getByRole('button', { name: 'Copy sign-in report' }).click();
+      await expect(page.getByText('Report copied.', { exact: true })).toBeVisible();
+      const report = await application.evaluate(({ clipboard }) => clipboard.readText());
+      expect(report).not.toMatch(/PRIVATE_|auth-bridge\.example\//);
+      const events = JSON.parse(report).events;
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            event: 'popup',
+            to: 'https://auth-bridge.example',
+            action: 'browser',
+          }),
+          expect.objectContaining({
+            event: 'request',
+            to: 'https://auth-bridge.example',
+            action: 'browser',
+            method: 'GET',
+          }),
+        ]),
+      );
+      const other = application
+        .context()
+        .pages()
+        .find(
+          (p) => p !== page && p.url().startsWith('dock://ui/') && !p.url().includes('surface='),
+        );
+      expect(other).toBeTruthy();
+      expect((await snapshot(other)).signInTrace.count).toBe(0);
+      await page.getByRole('button', { name: 'Clear report' }).click();
+      await expect(page.getByRole('button', { name: 'Copy sign-in report' })).toBeDisabled();
+      expect((await snapshot(page)).signInTrace.recording).toBe(false);
+      await command(page, { type: 'panel', panel: 'none' });
       await command(page, { type: 'navigate', action: 'home' });
       await waitRemote(id);
     },
@@ -1545,6 +1992,8 @@ try {
     id = await remote();
     await waitRemote(id);
     expect((await snapshot(page)).profileId).toBe(profileId);
+    expect((await snapshot(page)).windowNumber).toBe(1);
+    await expect(page.getByRole('img', { name: 'Window 1, Red', exact: true })).toBeVisible();
     expect(await js(id, 'document.cookie')).toContain('dock-auth=valid');
     expect(await js(id, 'localStorage.getItem("sentinel")')).toBe('personal');
     expect((await snapshot(page)).downloads.filter((d) => d.state === 'completed')).toHaveLength(3);

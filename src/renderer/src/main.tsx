@@ -8,6 +8,7 @@ import { SettingsPanel, type SettingsSection } from './settings';
 import { AboutPanel } from './about';
 import { ProfileSwitcher, ProfileMenuSurface } from './profile-dropdown';
 import { WindowLayoutButton, WindowLayoutMenu } from './window-layout';
+import { SignInDiagnostics } from './sign-in-diagnostics';
 import './style.css';
 
 declare global {
@@ -24,6 +25,15 @@ const labels: Record<Panel, string> = {
   about: 'About',
   diagnostics: 'Diagnostics',
 };
+const windowColors = [
+  { name: 'Red', color: '#f87171' },
+  { name: 'Orange', color: '#fb923c' },
+  { name: 'Yellow', color: '#facc15' },
+  { name: 'Green', color: '#4ade80' },
+  { name: 'Blue', color: '#60a5fa' },
+  { name: 'Indigo', color: '#818cf8' },
+  { name: 'Violet', color: '#a78bfa' },
+] as const;
 function App(): React.JSX.Element {
   const [state, setState] = useState<Snapshot>();
   const [error, setError] = useState('');
@@ -100,6 +110,7 @@ function App(): React.JSX.Element {
   };
   if (!state) return <main className="startup">Starting ChattyDock…</main>;
   const active = state.downloads.filter((download) => download.active).length;
+  const windowColor = windowColors[((state.windowNumber ?? 1) - 1) % windowColors.length];
   return (
     <>
       <header className="chrome">
@@ -108,6 +119,22 @@ function App(): React.JSX.Element {
             className="nav"
             aria-label={state.panel === 'none' ? 'Website navigation' : 'Panel navigation'}
           >
+            {state.windowNumber && (
+              <span
+                className="window-number"
+                data-window-color={windowColor.name.toLowerCase()}
+                style={{ backgroundColor: windowColor.color }}
+                role="img"
+                aria-label={`Window ${state.windowNumber}, ${windowColor.name}`}
+                title={`Window ${state.windowNumber} · ${windowColor.name}`}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <text x="12" y="12" textAnchor="middle" dominantBaseline="central">
+                    {state.windowNumber}
+                  </text>
+                </svg>
+              </span>
+            )}
             {state.panel === 'none' ? (
               <>
                 <button
@@ -256,6 +283,7 @@ function App(): React.JSX.Element {
             )}
             {state.panel === 'diagnostics' && (
               <>
+                <SignInDiagnostics state={state} run={run} />
                 <p className="intro">A snapshot of the application’s processes.</p>
                 <p className="hint">
                   Each process is listed once. Browser and utility processes can serve multiple

@@ -5,6 +5,29 @@ export async function startFixture() {
   const server = http.createServer(async (request, response) => {
     requestCount += 1;
     const url = new URL(request.url, 'http://localhost');
+    if (url.pathname.startsWith('/surface-fixture')) {
+      const cookie = request.headers.cookie ?? '';
+      const current =
+        cookie.match(
+          /(?:^|;\s*)codex_app_mode=(STEPS_PROSE|STEPS_COMMANDS|STEPS_EXECUTION)(?:;|$)/,
+        )?.[1] ?? 'STEPS_PROSE';
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(`<!doctype html><html><head><title>Surface fixture</title></head><body>
+        <h1>Per-window surface fixture</h1><output id="server-mode">${current}</output><output id="server-auth">${cookie.includes('dock-private-auth=fixture-secret')}</output>
+        <button id="choose-chat">Chat</button><button id="choose-codex">Codex</button>
+        <script>
+          const channel = new BroadcastChannel('codex:preference-cookies');
+          function currentMode(){return document.cookie.match(/(?:^|;\\s*)codex_app_mode=(STEPS_PROSE|STEPS_COMMANDS|STEPS_EXECUTION)(?:;|$)/)?.[1] || 'STEPS_PROSE';}
+          function refresh(){const path=currentMode()==='STEPS_PROSE'?'/surface-fixture-chat':'/surface-fixture-codex';if(location.pathname!==path)location.replace(path);}
+          channel.onmessage=event=>{if(event.data==='codex_app_mode')refresh();};
+          window.addEventListener('focus',refresh);
+          function select(mode){document.cookie='codex_app_mode='+mode+'; Path=/; SameSite=Lax';channel.postMessage('codex_app_mode');refresh();}
+          document.querySelector('#choose-chat').onclick=()=>select('STEPS_PROSE');
+          document.querySelector('#choose-codex').onclick=()=>select('STEPS_EXECUTION');
+          window.surfaceFixture={select,currentMode};
+        </script></body></html>`);
+      return;
+    }
     if (url.pathname === '/external-redirect') {
       response.writeHead(302, { Location: 'https://x.com/dock-redirect' });
       response.end();

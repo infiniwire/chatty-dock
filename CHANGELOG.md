@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+- Keep ChatGPT/Codex app selection independent per window while retaining shared sign-in, including preference broadcasts, focus changes and page reloads.
+- Number application windows in creation order, with the same number in the native title and a red-to-violet rainbow badge at the start of the navigation bar. Closed windows do not renumber remaining windows; numbering restarts when the app fully exits.
+- Keep the observed Google sign-in bridge at exact HTTPS `accounts.youtube.com` inside the initiating login session, preventing an unintended system-browser handoff after phone verification.
+- Add opt-in, per-window sign-in diagnostics with bounded origin-only reports and an isolated diagnostic launch mode.
+- Use a transparent double-window app icon with white strokes, a dark outline and a subtle shadow for light and dark backgrounds.
+
 ## 0.2.2
 
 - Add a compact window-layout menu next to Downloads, with fill, half-screen and quarter-screen positions plus restore.

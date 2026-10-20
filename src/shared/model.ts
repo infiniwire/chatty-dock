@@ -113,6 +113,10 @@ export const commandSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('clear-downloads') }),
   z.object({ type: z.literal('diagnostics') }),
+  z.object({
+    type: z.literal('sign-in-trace'),
+    action: z.enum(['start', 'stop', 'copy', 'clear']),
+  }),
   z.object({ type: z.literal('updates') }),
   z.object({ type: z.literal('project-page'), page: z.enum(['releases', 'repository']) }),
   z.object({ type: z.literal('update-token'), token: z.string().trim().max(512) }),
@@ -155,6 +159,7 @@ export type UpdateState = {
 export type Snapshot = {
   settings: Settings;
   profileId: string;
+  windowNumber: number;
   panel: Panel;
   profileMenuOpen: boolean;
   layoutMenuOpen: boolean;
@@ -171,6 +176,7 @@ export type Snapshot = {
   version: string;
   notice: string | null;
   update: UpdateState;
+  signInTrace?: { recording: boolean; count: number };
 };
 export type Result = { ok: true; value?: unknown } | { ok: false; error: string };
 export interface DockBridge {

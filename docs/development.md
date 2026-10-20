@@ -13,6 +13,10 @@ The main process, isolated preload, and renderer are built by electron-vite. Use
 
 ## Checks
 
+Application windows receive a process-local increasing number starting at 1. The native title ends in `- <number>` and the navigation badge cycles red, orange, yellow, green, blue, indigo and violet. Authentication popups and toolbar menus do not allocate numbers; profile changes and closing other windows do not change existing numbers. A full app restart starts at 1 again.
+
+Shared profiles still use the same persistent Electron session. The website's observed `codex_app_mode` cookie (`STEPS_PROSE`, `STEPS_COMMANDS`, `STEPS_EXECUTION`) controls its ChatGPT/Codex surface and is re-read by preference-cookie broadcast/focus listeners. `src/preload/remote.ts` installs a page-world shim before website scripts on exact content origins. It snapshots only that UI preference in per-window session storage; other `document.cookie` accesses remain native. `src/main/window-surface.ts` accepts only the owning main frame's finite mode marker and applies it to that window's outgoing ChatGPT cookie header for consistent server-rendered reloads. No website-wide channel/storage suppression is used. This is a site-specific compatibility layer; changes to upstream preference names or values require review.
+
 ```sh
 npm run lint
 npm run typecheck
@@ -72,3 +76,7 @@ Presets use Electron display work areas in device-independent pixels, including 
 Snapped windows can be smaller than the ordinary 720 by 500 minimum. Settings accept sizes down to 320 by 240 so quarter-screen positions persist without invalidating profiles/settings; a preset below that size is rejected with an explanation. Fullscreen windows must leave fullscreen before applying a layout. Layouts apply to this window only and do not rearrange other applications.
 
 Deferred authentication bugs are recorded in [Known issues](known-issues.md); never store OAuth query parameters in that log.
+
+For AUTH-001, use Settings > Diagnostics > Start recording in a diagnostic candidate, complete authentication manually, and return to Diagnostics to stop/copy the report. The per-window in-memory ring stores at most 64 top-level origin/routing records, including popup and request-backstop decisions. It never records full URLs, paths, credentials, cookies, POST bodies or page contents, and does not change routing decisions or browser identity. Reports are copied locally only on request. Fixture tests do not certify real Google authentication.
+
+The explicit `--diagnose-signin` launch option starts recording automatically and uses a separate `ChattyDock Sign-in Diagnostics` data directory, native Windows identity and labeled window title, so the installed application's single-instance lock does not intercept it. This mode does not read/copy browser profiles from the installed app and does not perform automatic updates. Test-mode data overrides still apply in fixture tests.

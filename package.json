@@ -1,6 +1,6 @@
 {
   "name": "chatty-dock",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "An independent multi-window ChatGPT desktop workspace",
   "main": "out/main/index.js",
   "author": "infiniwire",

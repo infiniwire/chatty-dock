@@ -11,6 +11,7 @@ import {
   nativeTheme,
   protocol,
   net,
+  clipboard,
   type WebContents,
   type Session,
   type IpcMainInvokeEvent,
@@ -32,25 +33,38 @@ import { layoutBounds, sameBounds } from './window-layout';
 import { Downloads } from './downloads';
 import { Updates } from './updates';
 import { ChatTypography, toolbarHeight } from './typography';
+import { SignInTrace } from './sign-in-trace';
+import { WindowSurface, surfaceCookieHeader } from './window-surface';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'dock', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 const testMode = process.env.DOCK_TEST === '1' && process.argv.includes('--dock-test');
+const signInDiagnosticMode = process.argv.includes('--diagnose-signin');
 const fixture = testMode ? process.env.DOCK_FIXTURE : undefined;
 if (fixture && !/^http:\/\/127\.0\.0\.1:\d+$/.test(fixture))
   throw new Error('Invalid fixture origin.');
 if (testMode && process.env.DOCK_TEST_DATA)
   app.setPath('userData', path.resolve(process.env.DOCK_TEST_DATA));
+else if (signInDiagnosticMode)
+  app.setPath('userData', path.join(app.getPath('appData'), 'ChattyDock Sign-in Diagnostics'));
 const updateE2e = ['chatty-dock-update-test', 'ChattyDock Update Test'].includes(app.getName());
-app.setName(updateE2e ? 'ChattyDock Update Test' : 'ChattyDock');
+app.setName(
+  updateE2e
+    ? 'ChattyDock Update Test'
+    : signInDiagnosticMode
+      ? 'ChattyDock Diagnostics'
+      : 'ChattyDock',
+);
 const windowsAppId = updateE2e
   ? 'io.github.infiniwire.chatty-dock-update-test'
-  : testMode
-    ? 'io.github.infiniwire.chatty-dock.integration-test'
-    : app.isPackaged
-      ? 'io.github.infiniwire.chatty-dock'
-      : 'io.github.infiniwire.chatty-dock.development';
+  : signInDiagnosticMode
+    ? 'io.github.infiniwire.chatty-dock.sign-in-diagnostics'
+    : testMode
+      ? 'io.github.infiniwire.chatty-dock.integration-test'
+      : app.isPackaged
+        ? 'io.github.infiniwire.chatty-dock'
+        : 'io.github.infiniwire.chatty-dock.development';
 if (process.platform === 'win32') app.setAppUserModelId(windowsAppId);
 const locked = app.requestSingleInstanceLock();
 if (!locked) app.quit();
@@ -58,6 +72,7 @@ type WindowEntry = {
   win: BrowserWindow;
   view: WebContentsView;
   profileId: string;
+  windowNumber: number;
   panel: Panel;
   loading: boolean;
   error: string | null;
@@ -65,6 +80,8 @@ type WindowEntry = {
   title: string;
   fontSize: number;
   typography?: ChatTypography;
+  signInTrace: SignInTrace;
+  surface?: WindowSurface;
   toolbarMenu?: BrowserWindow;
   toolbarMenuSurface?: 'profile-menu' | 'layout-menu';
   layoutPreset?: WindowLayout;
@@ -72,6 +89,7 @@ type WindowEntry = {
   layoutRestore?: { bounds: Electron.Rectangle; maximized: boolean; minimum: number[] };
 };
 const windows = new Map<number, WindowEntry>();
+let nextWindowNumber = 1;
 const retired = new Map<number, WebContentsView>();
 const owners = new Map<number, number>();
 const popups = new Map<number, { win: BrowserWindow; profileId: string }>();
@@ -100,9 +118,9 @@ function focused(): WindowEntry | undefined {
         [...windows.values()].find((entry) => entry.toolbarMenu === window))
     : windows.values().next().value;
 }
-function windowTitle(profileId: string): string {
+function windowTitle(profileId: string, windowNumber: number): string {
   const profile = store.settings.profiles.find((item) => item.id === profileId)?.name ?? 'Profile';
-  return `ChattyDock v${app.getVersion()} — ${profile}`;
+  return `ChattyDock v${app.getVersion()}${signInDiagnosticMode ? ' (Sign-in diagnostics)' : ''} — ${profile} - ${windowNumber}`;
 }
 function emit(entry: WindowEntry): void {
   if (entry.win.isDestroyed() || entry.win.webContents.isLoadingMainFrame()) return;
@@ -110,6 +128,7 @@ function emit(entry: WindowEntry): void {
   const snapshot: Snapshot = {
     settings: store.settings,
     profileId: entry.profileId,
+    windowNumber: entry.windowNumber,
     panel: entry.panel,
     profileMenuOpen: !!entry.toolbarMenu && entry.toolbarMenuSurface === 'profile-menu',
     layoutMenuOpen: !!entry.toolbarMenu && entry.toolbarMenuSurface === 'layout-menu',
@@ -130,6 +149,7 @@ function emit(entry: WindowEntry): void {
     version: app.getVersion(),
     notice: entry.notice,
     update: updates?.state ?? { stage: 'idle', message: 'Starting update service…' },
+    signInTrace: { recording: entry.signInTrace.recording, count: entry.signInTrace.count },
   };
   entry.win.webContents.send('dock:state', snapshot);
   if (
@@ -138,7 +158,7 @@ function emit(entry: WindowEntry): void {
     !entry.toolbarMenu.webContents.isLoadingMainFrame()
   )
     entry.toolbarMenu.webContents.send('dock:state', snapshot);
-  entry.win.setTitle(windowTitle(entry.profileId));
+  entry.win.setTitle(windowTitle(entry.profileId, entry.windowNumber));
   entry.view.setVisible(entry.panel === 'none' && !entry.error);
 }
 function changed(): void {
@@ -298,6 +318,17 @@ function configureSession(profileId: string): Session {
   // A session-level backstop also covers initial popup requests and loadURL/history
   // APIs, which do not emit will-navigate. Never apply this to website resources.
   ses.webRequest.onBeforeRequest((details, callback) => {
+    const owner = windows.get(owners.get(details.webContentsId ?? -1) ?? -1);
+    if (details.resourceType === 'mainFrame' && owner) {
+      const kind = urlKind(details.url, fixture);
+      owner.signInTrace.record(
+        'request',
+        details.webContents?.getURL() ?? '',
+        details.url,
+        kind === 'external' ? 'browser' : kind === 'blocked' ? 'blocked' : 'embedded',
+        details.method,
+      );
+    }
     if (details.resourceType !== 'mainFrame' || isEmbeddedURL(details.url, fixture)) {
       callback({});
       return;
@@ -310,6 +341,23 @@ function configureSession(profileId: string): Session {
     });
     if (urlKind(details.url, fixture) === 'external')
       void openExternal(details.url).catch(() => {});
+  });
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
+    const owner = windows.get(owners.get(details.webContentsId ?? -1) ?? -1);
+    const mode = owner?.surface?.value;
+    if (mode !== undefined && urlKind(details.url, fixture) === 'content') {
+      const key =
+        Object.keys(details.requestHeaders).find((key) => key.toLowerCase() === 'cookie') ??
+        'Cookie';
+      const header = details.requestHeaders[key];
+      const value = surfaceCookieHeader(
+        Array.isArray(header) ? header.join('; ') : (header ?? ''),
+        mode,
+      );
+      if (value) details.requestHeaders[key] = value;
+      else delete details.requestHeaders[key];
+    }
+    callback({ requestHeaders: details.requestHeaders });
   });
   ses.setPermissionCheckHandler(() => false);
   ses.setPermissionRequestHandler((contents, permission, callback, details) => {
@@ -346,15 +394,42 @@ function configureSession(profileId: string): Session {
 function secureRemote(contents: WebContents, profileId: string, ownerId: number): void {
   owners.set(contents.id, ownerId);
   contents.once('destroyed', () => owners.delete(contents.id));
+  const trace = (event: Parameters<SignInTrace['record']>[0], url: string, code?: number): void => {
+    const owner = windows.get(ownerId);
+    const kind = urlKind(url, fixture);
+    owner?.signInTrace.record(
+      event,
+      contents.getURL(),
+      url,
+      kind === 'external' || event === 'manual-browser'
+        ? 'browser'
+        : kind === 'blocked'
+          ? 'blocked'
+          : 'embedded',
+      undefined,
+      code,
+    );
+  };
   const guard = (event: Electron.Event & { url: string; isMainFrame: boolean }): void => {
     if (!event.isMainFrame || isEmbeddedURL(event.url, fixture)) return;
     event.preventDefault();
     if (urlKind(event.url, fixture) === 'external') void openExternal(event.url).catch(() => {});
   };
-  contents.on('will-navigate', guard);
-  contents.on('will-redirect', guard);
+  contents.on('will-navigate', (event) => {
+    if (event.isMainFrame) trace('navigation', event.url);
+    guard(event);
+  });
+  contents.on('will-redirect', (event) => {
+    if (event.isMainFrame) trace('redirect', event.url);
+    guard(event);
+  });
+  contents.on('did-navigate', (_event, url) => trace('committed', url));
+  contents.on('did-fail-load', (_event, code, _description, url, isMainFrame) => {
+    if (isMainFrame) trace('failed', url, code);
+  });
   contents.on('will-attach-webview', (event) => event.preventDefault());
   contents.setWindowOpenHandler(({ url }) => {
+    trace('popup', url);
     const kind = urlKind(url, fixture);
     if (kind === 'auth' || kind === 'content') {
       return {
@@ -398,10 +473,15 @@ function homeFor(id: string): string {
 }
 function attachView(entry: WindowEntry): void {
   entry.typography?.dispose();
+  entry.surface?.dispose();
+  const surface = new WindowSurface();
+  entry.surface = surface;
   entry.fontSize = 16;
   const view = new WebContentsView({
     webPreferences: {
       session: configureSession(entry.profileId),
+      preload: path.join(__dirname, '../preload/remote.js'),
+      additionalArguments: surface.arguments(fixture),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -414,6 +494,7 @@ function attachView(entry: WindowEntry): void {
   entry.win.contentView.addChildView(view);
   resize(entry);
   const contents = view.webContents;
+  surface.attach(contents, (url) => urlKind(url, fixture) === 'content');
   contents.setZoomFactor(store.settings.zoom);
   secureRemote(contents, entry.profileId, entry.win.id);
   entry.typography = new ChatTypography(
@@ -481,9 +562,10 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
     ? screen.getDisplayMatching(saved).workArea
     : screen.getPrimaryDisplay().workArea;
   const restored = clampBounds(saved, area);
+  const windowNumber = nextWindowNumber++;
   const win = new BrowserWindow({
     ...restored,
-    title: windowTitle(profileId),
+    title: windowTitle(profileId, windowNumber),
     minWidth: Math.min(720, restored.width),
     minHeight: Math.min(500, restored.height),
     show: false,
@@ -514,6 +596,7 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
   const entry = {
     win,
     profileId,
+    windowNumber,
     panel: 'none',
     loading: true,
     error: null,
@@ -522,8 +605,14 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
       : null,
     title: 'ChatGPT',
     fontSize: 16,
+    signInTrace: new SignInTrace(),
   } as WindowEntry;
   windows.set(win.id, entry);
+  if (signInDiagnosticMode) {
+    entry.signInTrace.start(HOME);
+    entry.notice =
+      'Separate sign-in diagnostic profile. Recording controls and report: Settings → Advanced → Open diagnostics.';
+  }
   attachView(entry);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.on('page-title-updated', (event) => event.preventDefault());
@@ -545,6 +634,8 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
     if (downloads.hasActive(undefined, win.id)) win.contentView.removeChildView(entry.view);
   });
   win.on('closed', () => {
+    entry.signInTrace.clear();
+    entry.surface?.dispose();
     entry.typography?.dispose();
     windows.delete(win.id);
     for (const popup of popups.values())
@@ -733,6 +824,7 @@ async function execute(
       if (entry.profileId === command.id) break;
       if (downloads.hasActive(undefined, entry.win.id))
         throw new Error('Finish this window’s downloads before switching profiles.');
+      entry.signInTrace.clear();
       for (const popup of popups.values())
         if (owners.get(popup.win.webContents.id) === entry.win.id) popup.win.close();
       entry.win.contentView.removeChildView(entry.view);
@@ -760,6 +852,12 @@ async function execute(
           void contents.loadURL(fixture ? `${fixture}/` : HOME).catch(() => {});
           break;
         case 'external':
+          entry.signInTrace.record(
+            'manual-browser',
+            contents.getURL(),
+            contents.getURL(),
+            'browser',
+          );
           await openExternal(contents.getURL());
           break;
         default: {
@@ -814,6 +912,12 @@ async function execute(
         cpu: metric.cpu.percentCPUUsage,
         workingSetKB: metric.memory.workingSetSize,
       }));
+    case 'sign-in-trace':
+      if (command.action === 'start') entry.signInTrace.start(contents.getURL());
+      else if (command.action === 'stop') entry.signInTrace.stop();
+      else if (command.action === 'clear') entry.signInTrace.clear();
+      else clipboard.writeText(entry.signInTrace.report(app.getVersion(), process.platform));
+      break;
     case 'updates':
       await updates.check();
       break;
@@ -1010,7 +1114,7 @@ if (locked)
           flushComplete = true;
           updateShutdown = true;
         },
-        testMode,
+        testMode || signInDiagnosticMode,
         updateE2e && process.argv.includes('--dock-update-test')
           ? process.env.DOCK_UPDATE_E2E_FEED
           : undefined,
