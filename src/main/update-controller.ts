@@ -76,11 +76,13 @@ export class UpdateController {
   private checking = false;
   private downloaded = false;
   private installing = false;
+  private installAttempt = 0;
   constructor(
     private backend: UpdateBackend,
     private changed: () => void,
     private canInstall: () => boolean,
     private prepareInstall: () => Promise<void>,
+    private beginInstall: () => void,
   ) {
     backend.autoDownload = true;
     backend.autoInstallOnAppQuit = false;
@@ -134,12 +136,16 @@ export class UpdateController {
   set(state: UpdateState): void {
     this.state = {
       ...state,
-      credentialSource: state.credentialSource ?? this.state.credentialSource,
+      credentialSource:
+        state.stage === 'credentials'
+          ? undefined
+          : (state.credentialSource ?? this.state.credentialSource),
       checkedAt: state.checkedAt ?? this.state.checkedAt,
     };
     this.changed();
   }
   fail(): void {
+    this.installAttempt++;
     this.downloaded = false;
     this.installing = false;
     // Provider errors can contain tokens, authorization headers, or signed URLs.
@@ -163,13 +169,28 @@ export class UpdateController {
   }
   async maybeInstall(): Promise<void> {
     if (!this.downloaded || this.installing || !this.canInstall()) return;
+    const attempt = ++this.installAttempt;
     this.installing = true;
     this.set({ ...this.state, stage: 'installing', message: 'Installing update and restarting…' });
     try {
       await this.prepareInstall();
+      // A provider error/retry can invalidate this asynchronous flush. Its late
+      // completion must not install or overwrite a newer attempt's state.
+      if (attempt !== this.installAttempt || !this.downloaded) return;
+      if (!this.canInstall()) {
+        this.installing = false;
+        this.set({
+          ...this.state,
+          stage: 'waiting',
+          message: 'Update verified. Waiting for file downloads before restarting…',
+        });
+        return;
+      }
+      // Commit shutdown only after the last guard, without another async gap.
+      this.beginInstall();
       this.backend.quitAndInstall(true, true);
     } catch {
-      this.fail();
+      if (attempt === this.installAttempt) this.fail();
     }
   }
 }

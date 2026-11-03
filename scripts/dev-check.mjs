@@ -42,7 +42,17 @@ let browser;
 try {
   await expect
     .poll(
-      async () => (await fetch(`http://127.0.0.1:${port}/json/version`).catch(() => null))?.status,
+      () =>
+        new Promise((resolve) => {
+          // The OS can assign a port blocked by fetch's browser-style port policy
+          // (for example 6665). This is a trusted, loopback-only DevTools probe.
+          const request = http.get(`http://127.0.0.1:${port}/json/version`, (response) => {
+            response.resume();
+            resolve(response.statusCode);
+          });
+          request.setTimeout(1000, () => request.destroy());
+          request.on('error', () => resolve(undefined));
+        }),
       { timeout: 30000 },
     )
     .toBe(200);

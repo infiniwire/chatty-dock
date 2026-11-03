@@ -78,9 +78,6 @@ jobs:
         run: npm run test:electron
         env:
           DOCK_EXECUTABLE: ${{ matrix.unpacked }}
-      - name: Verify silent update installation and automatic relaunch
-        if: matrix.os == 'win'
-        run: npm run test:update-install
       - name: Upload packages
         uses: actions/upload-artifact@v7.0.2
         with:
@@ -99,10 +96,32 @@ jobs:
           path: |
             artifacts/*.json
             artifacts/*.png
-            artifacts/update-install/result.json
+          retention-days: 14
+  update-install:
+    needs: validate
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Verify runner architecture
+        run: node -e "if(process.arch !== 'x64') process.exit(1)"
+      - run: npm ci
+      - run: npm run build
+      - name: Verify silent update installation and automatic relaunch
+        run: npm run test:update-install
+      - name: Upload update installation evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-evidence-update-install-win-x64
+          path: artifacts/update-install/result.json
           retention-days: 14
   collect:
-    needs: [validate, build]
+    needs: [validate, build, update-install]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

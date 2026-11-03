@@ -9,6 +9,7 @@ Git commits alone are not updates: maintainers must publish a newer semantic-ver
 - No update confirmation or installer wizard is shown for a normal per-user Windows installation.
 - Existing file downloads finish before automatic installation begins.
 - Settings, profiles, cookies and website storage are flushed before the updater is allowed to quit.
+- Readiness is checked again after that asynchronous flush. A new file transfer defers installation and is allowed to finish; updater errors invalidate pending installation work so it cannot install or overwrite a newer retry's status.
 - Unsent text inside the website is not saved by the wrapper. The requested automatic restart can discard unsent text; avoid leaving drafts across startup updates.
 - Failed checks/downloads leave the current app usable and report a non-sensitive status in Settings.
 - Downgrades and prerelease updates are disabled.
@@ -47,6 +48,6 @@ The collector generates one merged Mac metadata document from the actual files; 
 
 Unit tests cover lifecycle ordering, overlapping checks, waiting for transfers, silent/relaunch arguments, failure handling, redaction, digest metadata and architecture merging.
 
-`npm run test:update-install` runs only on isolated Windows CI. It builds two dedicated test-product NSIS installers, installs the older version into a test directory, starts it against a local HTTP update feed, and waits for the updater to download, silently install and relaunch the higher version. The app's startup version and persistent profile ID are then verified. Test products use their own name, app ID, install directory and user data; production installations are not used. The script does not merely mock `quitAndInstall`.
+`npm run test:update-install` runs only on isolated Windows CI. The release workflow runs it once in a dedicated job, in parallel with the platform builds; ordinary main/PR CI does not repeat it. Publication requires both the build matrix and this installation job to succeed. The installation job builds the application before invoking the script, which builds two dedicated test-product NSIS installers, installs the older version into a test directory, starts it against a local HTTP update feed, and waits for the updater to download, silently install and relaunch the higher version. The app's startup version and persistent profile ID are then verified. Test products use their own name, app ID, install directory and user data; production installations are not used. The script does not merely mock `quitAndInstall`.
 
 This Windows installation test does not establish signed macOS installation behavior. The Mac credential requirement must be satisfied and verified separately.

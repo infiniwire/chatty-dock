@@ -160,7 +160,9 @@ export class Downloads {
   }
   async flush(): Promise<void> {
     clearTimeout(this.persistTimer);
-    const data = JSON.stringify(this.records.filter((r) => !r.active).slice(0, 200), null, 2);
+    // Keep unfinished transfers too: load() restores them as interrupted after an
+    // abrupt exit. The bounded history matches the persisted-record schema.
+    const data = JSON.stringify(this.records.slice(0, 300), null, 2);
     this.chain = this.chain
       .catch(() => {})
       .then(async () => {

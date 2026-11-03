@@ -17,15 +17,99 @@ function setup() {
   });
   const prepare = vi.fn(async () => {});
   const canInstall = vi.fn(() => true);
+  // Production commits its quitting flag here, after the final canInstall check.
+  const beginInstall = vi.fn(() => canInstall.mockReturnValue(false));
   const controller = new UpdateController(
     backend as unknown as UpdateBackend,
     vi.fn(),
     canInstall,
     prepare,
+    beginInstall,
   );
-  return { backend, controller, prepare, canInstall };
+  return { backend, controller, prepare, canInstall, beginInstall };
 }
 describe('automatic update lifecycle', () => {
+  it('waits again if a file transfer starts while session data is being flushed', async () => {
+    const { backend, controller, prepare, canInstall, beginInstall } = setup();
+    let finish!: () => void;
+    prepare.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    canInstall.mockReturnValue(false);
+    backend.emit('update-downloaded', { version: '0.3.0' });
+    canInstall.mockReturnValue(true);
+    const pending = controller.maybeInstall();
+    canInstall.mockReturnValue(false);
+    finish();
+    await pending;
+    expect(backend.quitAndInstall).not.toHaveBeenCalled();
+    expect(controller.state.stage).toBe('waiting');
+    expect(beginInstall).not.toHaveBeenCalled();
+    canInstall.mockReturnValue(true);
+    await controller.maybeInstall();
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(backend.quitAndInstall).toHaveBeenCalledOnce();
+    expect(beginInstall).toHaveBeenCalledOnce();
+  });
+  it('does not install after an updater error invalidates an in-flight session flush', async () => {
+    const { backend, controller, prepare, canInstall, beginInstall } = setup();
+    let finish!: () => void;
+    prepare.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    canInstall.mockReturnValue(false);
+    backend.emit('update-downloaded', { version: '0.3.0' });
+    canInstall.mockReturnValue(true);
+    const pending = controller.maybeInstall();
+    backend.emit('error', new Error('failed while flushing'));
+    finish();
+    await pending;
+    expect(backend.quitAndInstall).not.toHaveBeenCalled();
+    expect(controller.state.stage).toBe('error');
+    expect(beginInstall).not.toHaveBeenCalled();
+  });
+  it.each(['resolve', 'reject'] as const)(
+    'ignores a stale %s from an older install attempt after retry starts',
+    async (outcome) => {
+      const { backend, controller, prepare, canInstall, beginInstall } = setup();
+      let finishOld!: () => void;
+      let rejectOld!: (error: Error) => void;
+      let finishNew!: () => void;
+      prepare
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve, reject) => {
+              finishOld = resolve;
+              rejectOld = reject;
+            }),
+        )
+        .mockImplementationOnce(() => new Promise<void>((resolve) => (finishNew = resolve)));
+      canInstall.mockReturnValue(false);
+      backend.emit('update-downloaded', { version: '0.3.0' });
+      canInstall.mockReturnValue(true);
+      const oldAttempt = controller.maybeInstall();
+      backend.emit('error', new Error('retry required'));
+      canInstall.mockReturnValue(false);
+      backend.emit('update-downloaded', { version: '0.3.1' });
+      canInstall.mockReturnValue(true);
+      const newAttempt = controller.maybeInstall();
+      if (outcome === 'resolve') finishOld();
+      else rejectOld(new Error('old flush failed'));
+      await oldAttempt;
+      expect(backend.quitAndInstall).not.toHaveBeenCalled();
+      expect(controller.state.stage).toBe('installing');
+      expect(controller.state.version).toBe('0.3.1');
+      expect(beginInstall).not.toHaveBeenCalled();
+      finishNew();
+      await newAttempt;
+      expect(backend.quitAndInstall).toHaveBeenCalledOnce();
+      expect(beginInstall).toHaveBeenCalledOnce();
+    },
+  );
+  it('clears stale access status when credentials are removed without a fallback', () => {
+    const { backend, controller } = setup();
+    controller.set({ stage: 'idle', message: 'Configured.', credentialSource: 'saved' });
+    backend.emit('checking-for-update');
+    expect(controller.state.credentialSource).toBe('saved');
+    controller.set({ stage: 'credentials', message: 'Repository access is needed.' });
+    expect(controller.state.credentialSource).toBeUndefined();
+  });
   it('keeps bounded plain-text release notes and check time through download and waiting', () => {
     const { backend, controller, canInstall } = setup();
     canInstall.mockReturnValue(false);

@@ -1110,6 +1110,8 @@ if (locked)
             ses.flushStorageData();
             await ses.cookies.flushStore();
           }
+        },
+        () => {
           quitting = true;
           flushComplete = true;
           updateShutdown = true;

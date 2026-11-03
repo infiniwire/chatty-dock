@@ -1847,7 +1847,10 @@ try {
         ({ BrowserWindow }, id) => BrowserWindow.fromId(id).setSize(1280, 900),
         winId,
       );
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      // Set this scenario's starting panel explicitly after resizing. Toolbar
+      // entry is exercised elsewhere; do not depend on the prior Escape/focus.
+      await command(page, { type: 'panel', panel: 'settings' });
+      await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
       const categories = page.getByRole('navigation', { name: 'Settings categories', exact: true });
       await categories.getByRole('button', { name: 'About', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'ChattyDock', exact: true })).toBeVisible();
@@ -2011,6 +2014,49 @@ try {
     expect(await js(id, 'localStorage.getItem("sentinel")')).toBe('personal');
     expect((await snapshot(page)).downloads.filter((d) => d.state === 'completed')).toHaveLength(3);
   });
+  await check(
+    'unfinished downloads remain in history after an abrupt application exit',
+    async () => {
+      await application.evaluate(
+        ({ webContents }, { id, origin }) => webContents.fromId(id).downloadURL(`${origin}/slow`),
+        { id, origin: fixture.origin },
+      );
+      await expect
+        .poll(async () => (await snapshot(page)).downloads.some((download) => download.active))
+        .toBe(true);
+      const download = (await snapshot(page)).downloads.find((download) => download.active);
+      await command(page, { type: 'download', id: download.id, action: 'pause' });
+      await expect
+        .poll(async () => {
+          const records = JSON.parse(
+            await fs.readFile(path.join(directory, 'downloads.json'), 'utf8'),
+          );
+          return records.find((record) => record.id === download.id)?.active;
+        })
+        .toBe(true);
+      // Bypass before-quit to model a crash, using only this test's temporary profile.
+      const closed = application.waitForEvent('close');
+      await application.evaluate(({ app }) => {
+        setTimeout(() => app.exit(0), 50);
+      });
+      await closed;
+      application = undefined;
+      page = await launch();
+      id = await remote();
+      await waitRemote(id);
+      const restored = (await snapshot(page)).downloads;
+      expect(restored.find((record) => record.id === download.id)).toMatchObject({
+        filename: download.filename,
+        state: 'interrupted',
+        active: false,
+        resumable: false,
+      });
+      expect(restored.filter((record) => record.state === 'completed')).toHaveLength(3);
+      await expect(
+        command(page, { type: 'download', id: download.id, action: 'resume' }),
+      ).rejects.toThrow('This action is not available');
+    },
+  );
   await fs.writeFile(
     path.join(output, 'performance.json'),
     JSON.stringify(performanceReport, null, 2),
@@ -2021,6 +2067,25 @@ try {
 } catch (error) {
   console.error(error);
   if (application) {
+    const localPages = [];
+    for (const page of application.context().pages()) {
+      if (!page.url().startsWith('dock://ui/')) continue;
+      localPages.push(
+        await page
+          .evaluate(() => ({
+            url: location.href,
+            title: document.querySelector('#panel-title')?.textContent,
+            buttons: [...document.querySelectorAll('button')].map(
+              (button) => button.getAttribute('aria-label') ?? button.textContent,
+            ),
+          }))
+          .catch(() => ({ unavailable: true })),
+      );
+    }
+    await fs.writeFile(
+      path.join(output, packaged ? 'packaged-failure-context.json' : 'failure-context.json'),
+      JSON.stringify({ localPages }, null, 2),
+    );
     for (const page of application.context().pages()) {
       await page
         .screenshot({ path: path.join(output, `failure-${Date.now()}.png`), timeout: 5000 })

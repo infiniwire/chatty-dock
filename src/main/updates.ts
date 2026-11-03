@@ -19,6 +19,7 @@ export class Updates {
     private changed: () => void,
     private canInstall: () => boolean,
     private prepareInstall: () => Promise<void>,
+    private beginInstall: () => void,
     private testMode: boolean,
     private e2eFeed?: string,
   ) {}
@@ -125,6 +126,7 @@ export class Updates {
         this.changed,
         this.canInstall,
         this.prepareInstall,
+        this.beginInstall,
       );
     if (this.e2eFeed) {
       const url = new URL(this.e2eFeed);

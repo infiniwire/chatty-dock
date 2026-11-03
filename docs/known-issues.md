@@ -1,5 +1,29 @@
 # Known issues
 
+## UPD-002: a new file download can be interrupted by an update restart
+
+- Status: correction included in 0.2.4.
+- The updater previously checked for active transfers only before asynchronously flushing session data. A transfer starting during that flush could still be interrupted by installation.
+- Installation now rechecks readiness after the flush, returns to the waiting state if needed, and commits application shutdown only after the final check. A later retry flushes data again before installing.
+
+## UPD-003: a failed update attempt can finish after a newer retry
+
+- Status: correction included in 0.2.4.
+- An updater error could invalidate the current download while its session flush was still pending. The old completion could nevertheless install; an old rejection could also reset a newer retry to an error state.
+- Each installation attempt now has an identity invalidated by errors. Stale completions and rejections cannot commit shutdown, install, or change a newer attempt's state. Four controlled-timing regression cases first failed against the previous implementation, covering both late outcomes and a transfer starting during the flush.
+
+## DL-001: unfinished download history disappears after an abrupt exit
+
+- Status: correction included in 0.2.4.
+- Download history writes previously excluded active transfers, so their entries were absent after a crash. Bounded history now includes them; startup marks them interrupted and disables stale pause/resume actions. Downloaded files and completed history are retained.
+- A persistence regression and a real Electron exit/restart scenario cover the correction. Interrupted transfers still require downloading again from the conversation; this does not add cross-restart resume support.
+
+## UPD-001: update access still appears configured after removing credentials
+
+- Status: correction included in 0.2.4.
+- When a saved token was removed and no environment or GitHub CLI credential was available, the updater entered the access-required state but retained the previous credential-source label. Entering that state now clears the stale label.
+- A lifecycle regression verifies that ordinary checking retains the configured source, while missing credentials clear it. No credentials or token values enter the state report.
+
 ## NAV-001: selecting Codex can change another window's page
 
 - Status: targeted compatibility correction included in 0.2.3. Source and packaged Windows suites passed; a current real-site two-window check also passed.

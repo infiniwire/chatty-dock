@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4
+
+- Recheck active file downloads after saving session data, deferring an update restart if a new transfer has started.
+- Invalidate pending update installation attempts after provider errors so late completions or failures cannot install or interfere with a retry.
+- Preserve unfinished downloads as interrupted history after an abrupt application exit.
+- Clear stale update-access status when credentials are removed without a fallback.
+- Avoid false development-startup failures when the OS chooses a DevTools port blocked by the Fetch API.
+- Run the Windows upgrade installation check once per release in a separate job parallel to the platform builds, while retaining it as a required publication gate and removing its duplicate from ordinary CI.
+
 ## 0.2.3
 
 - Keep ChatGPT/Codex app selection independent per window while retaining shared sign-in, including preference broadcasts, focus changes and page reloads.
