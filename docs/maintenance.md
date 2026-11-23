@@ -361,12 +361,32 @@ Monday through Sunday. Preserve previous entries when recording future runs.
   checks, including against the public repository. Ad-hoc macOS builds remain
   manual-update only.
 
+## 2026-11-22 — monthly release completed
+
+- Published stable [v0.3.4](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.4)
+  from commit `cef0d0f3438702e0aa50c84e3ea6b519f864f449`. This completes the
+  November 2026 monthly cycle and the weekly cycle of November 16–22. The
+  repository remains public as authorized; no further release is due for this
+  local date. There is no release job in progress or failed for this version.
+- [Release run 45091361074](https://github.com/infiniwire/chatty-dock/actions/runs/45091361074)
+  passed validation, Windows, Intel Mac and Apple Silicon Mac builds and
+  packaged smoke tests, and the separate Windows silent upgrade and relaunch
+  test. All eight expected release assets are present. Downloaded package and
+  manifest SHA-256 checksums and the manifest SHA-512 hashes matched; both
+  update manifests specify `0.3.4`. The release is stable and Latest. Evidence:
+  `artifacts/maintenance/release-0.3.4-verification/release-v0.3.4-verification.json`.
+- START-001's mitigation, the zoom slider and themed icons are released. The
+  original intermittent black screen still needs confirmation using an actual
+  affected profile. Real provider login remains unverified. The update client
+  still requires GitHub credentials even for a public repository, and ad-hoc
+  macOS packages require manual updates.
+
 ## Issue and backlog register
 
-| ID        | Score        | Status                                      | Fix commit               | Verification                                                               |
-| --------- | ------------ | ------------------------------------------- | ------------------------ | -------------------------------------------------------------------------- |
-| START-001 | 5/10         | Candidate mitigation; unreleased            | Candidate release commit | Fixture failed before and passed after; original report needs confirmation |
-| AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md`    | Fresh manual provider login not verified                                   |
+| ID        | Score        | Status                                      | Fix commit            | Verification                                                               |
+| --------- | ------------ | ------------------------------------------- | --------------------- | -------------------------------------------------------------------------- |
+| START-001 | 5/10         | Mitigation released in v0.3.4               | `cef0d0f`             | Fixture failed before and passed after; original report needs confirmation |
+| AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md` | Fresh manual provider login not verified                                   |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after
