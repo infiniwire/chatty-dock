@@ -391,6 +391,14 @@ fixture`, rather than the new application shell. The test now identifies
   the intended shell by its window number, regardless of page event order. The
   original failure is evidenced by both CI logs; the corrected source and
   packaged tests passed locally. Remote CI validation remains pending.
+- The first `0.3.5` candidate's Windows CI
+  ([run 45180855092](https://github.com/infiniwire/chatty-dock/actions/runs/45180855092))
+  selected the shell correctly but timed out after Retry while the remote URL
+  was empty. One plausible fixture race is that the short synthetic timeout
+  expires before the first stalled request reaches the server. The test now
+  verifies that request arrived before Retry and verifies a second request
+  afterward. This hypothesis is not yet validated on the affected CI runner;
+  no product defect is claimed from this result. No tag was created.
 - Using Node.js 22.23.3, format, lint, TypeScript, 59 unit tests, source build,
   development startup, startup recovery, and 32 Electron scenarios passed.
   The `0.3.5` unpacked Windows package passed startup recovery and the same 32

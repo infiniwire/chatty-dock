@@ -96,6 +96,9 @@ export async function startFixture() {
     get requestCount() {
       return requestCount;
     },
+    get stalledStartupRequests() {
+      return stalledStartupRequests;
+    },
     origin: `http://127.0.0.1:${server.address().port}`,
     close: () =>
       new Promise((resolve) => {

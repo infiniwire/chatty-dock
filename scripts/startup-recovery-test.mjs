@@ -92,9 +92,14 @@ try {
   await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible({
     timeout: 5000,
   });
+  // Slow runners can display the synthetic timeout before the first request
+  // reaches the fixture. Ensure the intended stalled request actually exists
+  // before retrying; otherwise the retry itself would be the first stalled one.
+  await expect.poll(() => fixture.stalledStartupRequests, { timeout: 45000 }).toBe(1);
   await fs.mkdir('artifacts', { recursive: true });
   await page.screenshot({ path: 'artifacts/startup-recovery.png' });
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect.poll(() => fixture.stalledStartupRequests, { timeout: 10000 }).toBe(2);
   await expect
     .poll(
       () =>
