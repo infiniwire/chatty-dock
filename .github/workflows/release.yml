@@ -152,10 +152,11 @@ jobs:
           MAC_SIGNED: ${{ (vars.SIGNED_RELEASES == 'true' || vars.SIGNED_MAC_RELEASES == 'true') && 'true' || 'false' }}
           WINDOWS_SIGNED: ${{ (vars.SIGNED_RELEASES == 'true' || vars.SIGNED_WINDOWS_RELEASES == 'true') && 'true' || 'false' }}
         run: |
+          node scripts/release-notes.mjs "$RELEASE_VERSION" > notes.md
           if [[ "$MAC_SIGNED" == 'true' ]]; then
-            printf 'macOS packages are Developer ID signed and notarized; automatic installation is supported.\n' > notes.md
+            printf '\nmacOS packages are Developer ID signed and notarized; automatic installation is supported.\n' >> notes.md
           else
-            printf 'macOS packages are ad-hoc signed and not notarized; automatic installation requires a future Developer ID signed build.\n' > notes.md
+            printf '\nmacOS packages are ad-hoc signed and not notarized; automatic installation requires a future Developer ID signed build.\n' >> notes.md
           fi
           if [[ "$WINDOWS_SIGNED" == 'true' ]]; then
             printf '\nWindows packages are signed.\n' >> notes.md

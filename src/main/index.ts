@@ -75,6 +75,7 @@ type WindowEntry = {
   windowNumber: number;
   panel: Panel;
   loading: boolean;
+  starting: boolean;
   error: string | null;
   notice: string | null;
   title: string;
@@ -122,6 +123,31 @@ function windowTitle(profileId: string, windowNumber: number): string {
   const profile = store.settings.profiles.find((item) => item.id === profileId)?.name ?? 'Profile';
   return `ChattyDock v${app.getVersion()}${signInDiagnosticMode ? ' (Sign-in diagnostics)' : ''} — ${profile} - ${windowNumber}`;
 }
+function iconPath(extension: 'ico' | 'png'): string {
+  const directory = app.isPackaged ? process.resourcesPath : path.join(__dirname, '../../build');
+  return path.join(
+    directory,
+    `icon${nativeTheme.shouldUseDarkColors ? '' : '-light'}.${extension}`,
+  );
+}
+function updateWindowIcon(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  if (process.platform === 'win32') {
+    const icon = iconPath('ico');
+    win.setIcon(icon);
+    win.setAppDetails({
+      appId: windowsAppId,
+      appIconPath: icon,
+      appIconIndex: 0,
+      relaunchCommand: `"${process.execPath}"${app.isPackaged ? '' : ` "${app.getAppPath()}"`}`,
+      relaunchDisplayName: app.isPackaged ? app.getName() : `${app.getName()} (Development)`,
+    });
+  }
+}
+function updateApplicationIcons(): void {
+  for (const entry of windows.values()) updateWindowIcon(entry.win);
+  if (process.platform === 'darwin') app.dock?.setIcon(iconPath('png'));
+}
 function emit(entry: WindowEntry): void {
   if (entry.win.isDestroyed() || entry.win.webContents.isLoadingMainFrame()) return;
   const contents = entry.view.webContents;
@@ -141,6 +167,7 @@ function emit(entry: WindowEntry): void {
     title: entry.title,
     typography: { fontSize: entry.fontSize, toolbarHeight: toolbarHeight(entry.fontSize) },
     loading: entry.loading,
+    starting: entry.starting,
     error: entry.error,
     canGoBack: !contents.isDestroyed() && contents.navigationHistory.canGoBack(),
     canGoForward: !contents.isDestroyed() && contents.navigationHistory.canGoForward(),
@@ -159,7 +186,7 @@ function emit(entry: WindowEntry): void {
   )
     entry.toolbarMenu.webContents.send('dock:state', snapshot);
   entry.win.setTitle(windowTitle(entry.profileId, entry.windowNumber));
-  entry.view.setVisible(entry.panel === 'none' && !entry.error);
+  entry.view.setVisible(entry.panel === 'none' && !entry.error && !entry.starting);
 }
 function changed(): void {
   if (broadcastTimer) return;
@@ -491,6 +518,8 @@ function attachView(entry: WindowEntry): void {
   entry.view = view;
   entry.error = null;
   entry.loading = true;
+  entry.starting = true;
+  view.setVisible(false);
   entry.win.contentView.addChildView(view);
   resize(entry);
   const contents = view.webContents;
@@ -508,8 +537,25 @@ function attachView(entry: WindowEntry): void {
       changed();
     },
   );
+  let startupTimer: ReturnType<typeof setTimeout> | undefined;
+  const requestedTimeout = Number(process.env.DOCK_TEST_STARTUP_TIMEOUT_MS);
+  const startupTimeout =
+    testMode && Number.isFinite(requestedTimeout) && requestedTimeout >= 100
+      ? Math.min(requestedTimeout, 30000)
+      : 20000;
+  const armStartupTimer = (): void => {
+    clearTimeout(startupTimer);
+    startupTimer = setTimeout(() => {
+      if (contents.isDestroyed() || entry.view.webContents !== contents || !entry.starting) return;
+      entry.loading = false;
+      entry.error = 'The page is taking too long to start. Check your connection and retry.';
+      changed();
+    }, startupTimeout);
+  };
+  contents.once('destroyed', () => clearTimeout(startupTimer));
   contents.on('did-start-loading', () => {
     entry.loading = true;
+    if (entry.starting) armStartupTimer();
     changed();
   });
   contents.on('did-stop-loading', () => {
@@ -532,20 +578,29 @@ function attachView(entry: WindowEntry): void {
     entry.error = null;
     changed();
   };
-  contents.on('did-navigate', location);
+  contents.on('did-navigate', () => {
+    clearTimeout(startupTimer);
+    entry.starting = false;
+    location();
+  });
   contents.on('did-navigate-in-page', location);
   contents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
     if (isMainFrame && code !== -3) {
+      clearTimeout(startupTimer);
+      entry.starting = false;
       entry.error = `The page could not load (network code ${code}). Check your connection and retry. Some sign-in providers restrict embedded browsers.`;
       entry.loading = false;
       changed();
     }
   });
   contents.on('render-process-gone', () => {
+    clearTimeout(startupTimer);
+    entry.starting = false;
     entry.error = 'The website renderer stopped. Reload to recover this window.';
     entry.loading = false;
     changed();
   });
+  armStartupTimer();
   void contents.loadURL(homeFor(entry.profileId)).catch(() => {
     /* did-fail-load provides a safe user-facing error. */
   });
@@ -571,9 +626,7 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
     show: false,
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#fcfcfc',
-    icon: app.isPackaged
-      ? path.join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon.png')
-      : path.join(__dirname, '../../build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    icon: iconPath(process.platform === 'win32' ? 'ico' : 'png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -582,23 +635,14 @@ async function createWindow(profileId = store.settings.defaultProfileId): Promis
       webSecurity: true,
     },
   });
-  if (process.platform === 'win32') {
-    win.setAppDetails({
-      appId: windowsAppId,
-      appIconPath: app.isPackaged
-        ? path.join(process.resourcesPath, 'icon.ico')
-        : path.join(__dirname, '../../build/icon.ico'),
-      appIconIndex: 0,
-      relaunchCommand: `"${process.execPath}"${app.isPackaged ? '' : ` "${app.getAppPath()}"`}`,
-      relaunchDisplayName: app.isPackaged ? app.getName() : `${app.getName()} (Development)`,
-    });
-  }
+  updateWindowIcon(win);
   const entry = {
     win,
     profileId,
     windowNumber,
     panel: 'none',
     loading: true,
+    starting: true,
     error: null,
     notice: store.recovered
       ? 'Settings were recovered. Your browser profile folders have not been deleted.'
@@ -685,6 +729,14 @@ async function execute(
   fromToolbarMenu = false,
 ): Promise<unknown> {
   const contents = entry.view.webContents;
+  const setZoom = (factor: number): void => {
+    for (const item of windows.values()) {
+      item.view.webContents.setZoomFactor(factor);
+      item.typography?.refreshScale();
+    }
+    store.settings.zoom = factor;
+    store.changed();
+  };
   switch (command.type) {
     case 'snapshot':
       emit(entry);
@@ -834,6 +886,9 @@ async function execute(
       attachView(entry);
       break;
     }
+    case 'zoom-set':
+      setZoom(command.factor);
+      break;
     case 'navigate': {
       switch (command.action) {
         case 'back':
@@ -844,8 +899,11 @@ async function execute(
           break;
         case 'reload':
           entry.error = null;
-          if (contents.getURL()) contents.reload();
-          else void contents.loadURL(homeFor(entry.profileId)).catch(() => {});
+          if (isEmbeddedURL(contents.getURL(), fixture)) contents.reload();
+          else {
+            entry.starting = true;
+            void contents.loadURL(homeFor(entry.profileId)).catch(() => {});
+          }
           break;
         case 'home':
           entry.error = null;
@@ -866,12 +924,7 @@ async function execute(
             command.action === 'zoom-reset'
               ? 1
               : Math.max(0.5, Math.min(2, contents.getZoomFactor() + delta));
-          for (const item of windows.values()) {
-            item.view.webContents.setZoomFactor(factor);
-            item.typography?.refreshScale();
-          }
-          store.settings.zoom = factor;
-          store.changed();
+          setZoom(factor);
           break;
         }
       }
@@ -881,6 +934,7 @@ async function execute(
       if (command.theme) {
         store.settings.theme = command.theme;
         nativeTheme.themeSource = command.theme;
+        updateApplicationIcons();
       }
       if (command.askDownload !== undefined) store.settings.askDownload = command.askDownload;
       store.changed();
@@ -1091,6 +1145,8 @@ if (locked)
       await store.flush();
       await mkdir(store.settings.downloadDirectory, { recursive: true }).catch(() => {});
       nativeTheme.themeSource = store.settings.theme;
+      nativeTheme.on('updated', updateApplicationIcons);
+      updateApplicationIcons();
       downloads = new Downloads(store, (contents) => owners.get(contents.id) ?? -1, changed);
       await downloads.load();
       updates = new Updates(

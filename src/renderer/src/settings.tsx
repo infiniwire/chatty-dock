@@ -45,10 +45,20 @@ export function SettingsPanel({
   const [token, setToken] = useState('');
   const [message, setMessage] = useState('');
   const [pendingAskDownload, setPendingAskDownload] = useState<boolean>();
+  const [zoomPercent, setZoomPercent] = useState(Math.round(state.settings.zoom * 100));
+  const requestedZoom = useRef<number | undefined>(undefined);
+  const zoomRequest = useRef(0);
   const busyRef = useRef(false);
   useEffect(() => {
     if (pendingAskDownload === state.settings.askDownload) setPendingAskDownload(undefined);
   }, [pendingAskDownload, state.settings.askDownload]);
+  useEffect(() => {
+    const current = Math.round(state.settings.zoom * 100);
+    if (requestedZoom.current === undefined || requestedZoom.current === current) {
+      requestedZoom.current = undefined;
+      setZoomPercent(current);
+    }
+  }, [state.settings]);
   const perform: RunCommand = async (command) => {
     if (busyRef.current) return { ok: false, error: 'An action is already in progress.' };
     busyRef.current = true;
@@ -121,7 +131,7 @@ export function SettingsPanel({
               <div className="setting-row">
                 <div>
                   <h2 id="zoom-heading">Website zoom</h2>
-                  <p>The toolbar follows your chat text size.</p>
+                  <p>Scale the whole website. The toolbar follows your chat text size.</p>
                 </div>
                 <div className="zoom-control" role="group" aria-label="Website zoom">
                   <button
@@ -129,28 +139,67 @@ export function SettingsPanel({
                     aria-label="Zoom out"
                     title="Zoom out"
                     disabled={busy || state.settings.zoom <= 0.5}
-                    onClick={() => void perform({ type: 'navigate', action: 'zoom-out' })}
+                    onClick={() => {
+                      zoomRequest.current++;
+                      requestedZoom.current = undefined;
+                      void perform({ type: 'navigate', action: 'zoom-out' });
+                    }}
                   >
                     <Minus aria-hidden="true" />
                   </button>
                   <output aria-label="Current website zoom" aria-live="polite">
-                    {Math.round(state.settings.zoom * 100)}%
+                    {zoomPercent}%
                   </output>
                   <button
                     className="icon-button"
                     aria-label="Zoom in"
                     title="Zoom in"
                     disabled={busy || state.settings.zoom >= 2}
-                    onClick={() => void perform({ type: 'navigate', action: 'zoom-in' })}
+                    onClick={() => {
+                      zoomRequest.current++;
+                      requestedZoom.current = undefined;
+                      void perform({ type: 'navigate', action: 'zoom-in' });
+                    }}
                   >
                     <Plus aria-hidden="true" />
                   </button>
                 </div>
               </div>
+              <div className="zoom-slider-row">
+                <label htmlFor="website-zoom">Website zoom</label>
+                <input
+                  id="website-zoom"
+                  type="range"
+                  min={50}
+                  max={200}
+                  step={5}
+                  value={zoomPercent}
+                  aria-valuetext={`${zoomPercent}%`}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const value = Number(event.currentTarget.value);
+                    const request = ++zoomRequest.current;
+                    requestedZoom.current = value;
+                    setZoomPercent(value);
+                    void run({ type: 'zoom-set', factor: value / 100 }).then((result) => {
+                      if (zoomRequest.current === request) {
+                        requestedZoom.current = undefined;
+                        if (result.ok) return;
+                        setZoomPercent(Math.round(state.settings.zoom * 100));
+                      }
+                    });
+                  }}
+                />
+                <span aria-hidden="true">50%–200%</span>
+              </div>
               <button
                 className="text-button reset-zoom"
                 disabled={busy || state.settings.zoom === 1}
-                onClick={() => void perform({ type: 'navigate', action: 'zoom-reset' })}
+                onClick={() => {
+                  zoomRequest.current++;
+                  requestedZoom.current = undefined;
+                  void perform({ type: 'navigate', action: 'zoom-reset' });
+                }}
               >
                 Reset to 100%
               </button>

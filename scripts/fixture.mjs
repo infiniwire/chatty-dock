@@ -2,9 +2,14 @@ import http from 'node:http';
 
 export async function startFixture() {
   let requestCount = 0;
+  let stalledStartupRequests = 0;
   const server = http.createServer(async (request, response) => {
     requestCount += 1;
     const url = new URL(request.url, 'http://localhost');
+    if (url.pathname === '/startup-hang-once' && stalledStartupRequests++ === 0) {
+      // Keep the first top-level request pending until the client retries.
+      return;
+    }
     if (url.pathname.startsWith('/surface-fixture')) {
       const cookie = request.headers.cookie ?? '';
       const current =

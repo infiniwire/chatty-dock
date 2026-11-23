@@ -87,6 +87,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('profile-delete'), id: z.uuid() }),
   z.object({ type: z.literal('profile-default'), id: z.uuid() }),
   z.object({ type: z.literal('profile-switch'), id: z.uuid() }),
+  z.object({ type: z.literal('zoom-set'), factor: z.number().min(0.5).max(2) }),
   z.object({
     type: z.literal('navigate'),
     action: z.enum([
@@ -168,6 +169,7 @@ export type Snapshot = {
   title: string;
   typography: { fontSize: number; toolbarHeight: number };
   loading: boolean;
+  starting: boolean;
   error: string | null;
   canGoBack: boolean;
   canGoForward: boolean;

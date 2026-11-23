@@ -1,12 +1,17 @@
 import fs from 'node:fs/promises';
 import sharp from 'sharp';
 import pngToIco from 'png-to-ico';
-const png = await sharp('build/icon-source.png').resize(1024).png().toBuffer();
-await fs.writeFile('build/icon.png', png);
-const buffers = await Promise.all(
-  [16, 24, 32, 48, 64, 128, 256].map((size) => sharp(png).resize(size).png().toBuffer()),
-);
-await fs.writeFile('build/icon.ico', await pngToIco(buffers));
+async function makeIcon(source, name) {
+  const png = await sharp(source).resize(1024, 1024).png().toBuffer();
+  await fs.writeFile(`build/${name}.png`, png);
+  const buffers = await Promise.all(
+    [16, 24, 32, 48, 64, 128, 256].map((size) => sharp(png).resize(size).png().toBuffer()),
+  );
+  await fs.writeFile(`build/${name}.ico`, await pngToIco(buffers));
+  return png;
+}
+const png = await makeIcon('build/icon-source.png', 'icon');
+await makeIcon('build/icon-light-source.png', 'icon-light');
 const chunks = await Promise.all(
   [
     ['ic07', 128],
@@ -25,4 +30,4 @@ const header = Buffer.alloc(8);
 header.write('icns');
 header.writeUInt32BE(8 + chunks.reduce((sum, chunk) => sum + chunk.length, 0), 4);
 await fs.writeFile('build/icon.icns', Buffer.concat([header, ...chunks]));
-console.log('Generated PNG, ICO and ICNS icons.');
+console.log('Generated dark and light PNG/ICO icons and the default ICNS icon.');

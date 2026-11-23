@@ -23,6 +23,7 @@ Download packages from this repository's Releases page. While this repository is
 - Native website file selection, file drag/drop, and clipboard image paste.
 - Session-authenticated downloads with progress, cancellation, supported pause/resume, open, and reveal.
 - Back/forward, reload, home, external browser access, and recoverable page errors.
+- Adjust website zoom with a slider in Settings, from 50% to 200%.
 - External HTTP/HTTPS links (including Twitter/X) open in the system default browser; the website container stays on ChatGPT or explicitly allowed sign-in hosts, including during popups and redirects.
 - On-demand process diagnostics, without scanning conversations.
 - Toolbar text automatically follows the website's chat/composer font size and zoom.
@@ -69,6 +70,8 @@ Electron does not eliminate ChatGPT's long-conversation rendering costs. The she
 `npm run test:electron` runs real Electron integration checks against a loopback fixture and records a 500-message performance scenario in `artifacts/performance.json`. These measurements are local fixture results, not ChatGPT benchmarks. Resource samples list processes once and can include shared memory.
 
 Some identity providers restrict embedded browsers. Authentication popups retain the initiating profile's session, but universal login compatibility is not promised. Opening a page in the system browser does not transfer its login back into the app. Website changes, service availability, account capabilities, and provider policies can affect login and attachments.
+
+If the initial website request takes too long, the window shows a retry option. A blank page can also have other causes; report whether reloading helps and any visible error without sharing account credentials or conversation content.
 
 Real ChatGPT authentication, upload/download, and voice require the separate manual checklist. Local fixture checks do not certify those website behaviors.
 

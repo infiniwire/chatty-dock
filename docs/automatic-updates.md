@@ -16,9 +16,9 @@ Git commits alone are not updates: maintainers must publish a newer semantic-ver
 - Development and ordinary integration-test launches do not install updates.
 - “Check for updates” performs a real check rather than opening the website.
 
-## Private repository access
+## Repository access
 
-The repository remains private. Each client needs its own permission to read it. Credentials are resolved in this order:
+The updater uses an authenticated GitHub feed even when the repository is public. Each client needs a GitHub credential with access to the repository. Credentials are resolved in this order:
 
 1. An OS-encrypted token saved from Settings.
 2. The local `GH_TOKEN` or `GITHUB_TOKEN` environment variable.

@@ -59,8 +59,15 @@ export function AboutPanel({
     <div className="about-content">
       <div className="about-identity">
         <img
-          className="app-icon"
+          className="app-icon app-icon-dark"
           src={new URL('../../../build/icon.png', import.meta.url).href}
+          alt=""
+          width={40}
+          height={40}
+        />
+        <img
+          className="app-icon app-icon-light"
+          src={new URL('../../../build/icon-light.png', import.meta.url).href}
           alt=""
           width={40}
           height={40}

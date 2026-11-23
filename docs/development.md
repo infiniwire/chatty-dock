@@ -47,7 +47,7 @@ npm run package:mac:x64
 npm run package:mac:arm64
 ```
 
-Icons are generated from the monochrome, two-window master `build/icon-source.png`; PNG, ICO and ICNS outputs are committed so packaging does not need image-generation tools. `sharp` and `png-to-ico` are development-only dependencies. Keep the broad strokes and clear separation readable at 16–32 px.
+Icons are generated from the dark `build/icon-source.png` and light `build/icon-light-source.png` masters. PNG and Windows ICO files are generated for both variants, and the default macOS ICNS uses the dark variant. Generated outputs are committed so packaging does not need image-generation tools. The running window icon and macOS Dock icon follow the selected theme; installer shortcuts and the macOS application bundle use the default icon. `sharp` and `png-to-ico` are development-only dependencies.
 
 Run packaged integration checks by setting `DOCK_EXECUTABLE` to the packaged executable and running `npm run test:electron`. This tests the actual ASAR-contained app and isolated preload, not just the development build.
 
@@ -63,7 +63,7 @@ After changes to the main process, fully quit and restart the source app to acti
 
 ## Windows taskbar identity
 
-Production windows use `io.github.infiniwire.chatty-dock`, matching the NSIS shortcut identity. Source development, integration tests and update-install tests use separate IDs. Main windows explicitly set the taskbar relaunch icon, display name and quoted command; development relaunch includes the absolute project path. Windows packages ship `resources/icon.ico` for this purpose in addition to the PNG resource.
+Production windows use `io.github.infiniwire.chatty-dock`, matching the NSIS shortcut identity. Source development, integration tests and update-install tests use separate IDs. Main windows explicitly set the taskbar relaunch icon, display name and quoted command; development relaunch includes the absolute project path. Windows packages ship both theme variants as ICO resources for the running window and taskbar.
 
 Pin the installed ChattyDock application, rather than `node_modules/electron/dist/electron.exe`. An old pin can retain Electron's icon and omit the project argument even when the running window displays the correct icon. Replace that pin with the installed Start Menu shortcut after fully exiting an older development coordinator. This does not require deleting icon caches, browser profiles or application data.
 

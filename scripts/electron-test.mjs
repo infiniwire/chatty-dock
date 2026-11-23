@@ -266,7 +266,7 @@ try {
             };
           });
           expect(info.details.appId).toBe('io.github.infiniwire.chatty-dock.integration-test');
-          expect(info.details.appIconPath).toMatch(/icon\.ico$/);
+          expect(info.details.appIconPath).toMatch(/icon(?:-light)?\.ico$/);
           expect((await fs.stat(info.details.appIconPath)).size).toBeGreaterThan(0);
           expect(info.details.relaunchCommand).toBe(
             `"${info.executable}"${info.packaged ? '' : ` "${info.appPath}"`}`,
@@ -306,6 +306,46 @@ try {
       },
     );
   }
+  await check('running application icon follows the selected theme', async () => {
+    const originalTheme = (await snapshot(page)).settings.theme;
+    await application.evaluate(({ app, BrowserWindow }) => {
+      app.__dockIconPaths = [];
+      if (process.platform === 'win32') {
+        app.__dockOriginalSetIcon = BrowserWindow.prototype.setIcon;
+        BrowserWindow.prototype.setIcon = function (icon) {
+          app.__dockIconPaths.push(String(icon));
+          return app.__dockOriginalSetIcon.call(this, icon);
+        };
+      } else if (process.platform === 'darwin') {
+        app.__dockOriginalSetIcon = app.dock.setIcon;
+        app.dock.setIcon = function (icon) {
+          app.__dockIconPaths.push(String(icon));
+          return app.__dockOriginalSetIcon.call(this, icon);
+        };
+      }
+    });
+    try {
+      for (const theme of ['dark', 'light']) {
+        await command(page, { type: 'settings', theme });
+        if (process.platform === 'win32' || process.platform === 'darwin') {
+          await expect
+            .poll(() => application.evaluate(({ app }) => app.__dockIconPaths.at(-1)))
+            .toMatch(
+              theme === 'dark' ? /[\\/]icon\.(?:ico|png)$/ : /[\\/]icon-light\.(?:ico|png)$/,
+            );
+        }
+      }
+    } finally {
+      await command(page, { type: 'settings', theme: originalTheme });
+      await application.evaluate(({ app, BrowserWindow }) => {
+        if (process.platform === 'win32')
+          BrowserWindow.prototype.setIcon = app.__dockOriginalSetIcon;
+        else if (process.platform === 'darwin') app.dock.setIcon = app.__dockOriginalSetIcon;
+        delete app.__dockOriginalSetIcon;
+        delete app.__dockIconPaths;
+      });
+    }
+  });
   await check(
     'window layout menu snaps only its owner, restores bounds and respects screen work areas',
     async () => {
@@ -1771,6 +1811,30 @@ try {
       await expect.poll(async () => (await snapshot(page)).settings.zoom).toBeGreaterThan(1);
       await page.getByRole('button', { name: 'Reset to 100%', exact: true }).click();
       await expect.poll(async () => (await snapshot(page)).settings.zoom).toBe(1);
+      const zoomSlider = page.getByRole('slider', { name: 'Website zoom', exact: true });
+      await zoomSlider.fill('65');
+      await expect(zoomSlider).toHaveAttribute('aria-valuetext', '65%');
+      await expect.poll(async () => (await snapshot(page)).settings.zoom).toBe(0.65);
+      await expect
+        .poll(() =>
+          application.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows()
+              .filter((win) => win.contentView.children.length > 0)
+              .every(
+                (win) =>
+                  Math.abs(win.contentView.children[0].webContents.getZoomFactor() - 0.65) < 0.001,
+              ),
+          ),
+        )
+        .toBe(true);
+      await expect
+        .poll(async () => JSON.parse(await fs.readFile(path.join(directory, 'settings.json'))).zoom)
+        .toBe(0.65);
+      await zoomSlider.focus();
+      await page.keyboard.press('ArrowRight');
+      await expect.poll(async () => (await snapshot(page)).settings.zoom).toBe(0.7);
+      await page.getByRole('button', { name: 'Reset to 100%', exact: true }).click();
+      await expect.poll(async () => (await snapshot(page)).settings.zoom).toBe(1);
       await categories.getByRole('button', { name: 'Downloads', exact: true }).click();
       const saveSwitch = page.getByRole('switch', { name: /Ask where to save each file/ });
       await saveSwitch.click();
@@ -1866,6 +1930,10 @@ try {
       for (const theme of ['light', 'dark']) {
         await command(page, { type: 'settings', theme });
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+        await expect(page.locator(`.app-icon-${theme}`)).toBeVisible();
+        await expect(
+          page.locator(`.app-icon-${theme === 'light' ? 'dark' : 'light'}`),
+        ).toBeHidden();
         await page
           .locator('.panel')
           .screenshot({ path: path.join(output, 'about', `about-${theme}.png`) });

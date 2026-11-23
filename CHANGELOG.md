@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4
+
+- Show a connecting state for the initial website navigation and offer a retry when the request stalls before the page opens.
+- Add a website zoom slider in Settings, with saved preferences shared across windows.
+- Replace the application icon and add dark and light variants that follow the selected theme while the app is running.
+- Exercise stalled startup recovery and theme-specific icons in the Electron integration checks.
+- Include the current version's changelog entry in published release notes.
+
 ## 0.2.4
 
 - Recheck active file downloads after saving session data, deferring an update restart if a new transfer has started.

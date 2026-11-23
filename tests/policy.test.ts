@@ -131,5 +131,10 @@ it('rejects malformed privileged commands', () => {
     false,
   );
   expect(commandSchema.safeParse({ type: 'navigate', action: 'execute' }).success).toBe(false);
+  expect(commandSchema.safeParse({ type: 'zoom-set', factor: 0.5 }).success).toBe(true);
+  expect(commandSchema.safeParse({ type: 'zoom-set', factor: 2 }).success).toBe(true);
+  for (const factor of [0.49, 2.01, NaN, Infinity]) {
+    expect(commandSchema.safeParse({ type: 'zoom-set', factor }).success).toBe(false);
+  }
   expect(commandSchema.safeParse({ type: 'profile-create', name: '   ' }).success).toBe(false);
 });

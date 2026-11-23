@@ -1,0 +1,373 @@
+# Maintenance log
+
+All dates and release periods in this log use `America/Vancouver`. Weeks run
+Monday through Sunday. Preserve previous entries when recording future runs.
+
+## Current state
+
+- Repository: `infiniwire/chatty-dock`; working checkout: `D:\Github\chatty-dock`.
+- Release status: **preparing**. On 2026-11-22, the user authorized normal
+  pushes and releases whether the repository is public or private. Do not
+  change repository visibility from this maintenance task.
+- Version policy: three-part `A.B.C`. A daily emergency or weekly maintenance
+  release increments `C` by one. A monthly release increments `B` by one and
+  keeps `C` unchanged, as specified by adding `0.1.0`. For example, `0.2.3`
+  becomes `0.2.4` for a daily or weekly release and `0.3.3` for a monthly
+  release. The former four-part policy and its blocker have been superseded.
+  Standard release and update validation remains mandatory before any release.
+- Release workflow configuration at commit `2f7afe1` has a separate
+  `update-install` job parallel to the three platform builds, and ordinary CI
+  does not run the update installation test.
+- Verified changes awaiting release: START-001 has a mitigation for a stalled
+  initial request; the website zoom slider and themed application icons are
+  included in the candidate. The reported intermittent black screen may have
+  other causes and still needs user confirmation.
+- Local release candidate: `0.3.4`, prepared for the first outstanding monthly
+  release under the requested `+0.1.0` policy. Do not mark any release period
+  complete until all release conditions pass.
+- Latest observed stable release: [v0.2.4](https://github.com/infiniwire/chatty-dock/releases/tag/v0.2.4),
+  commit `2f7afe155947928b8f6d57e0740c7b94706e0e70`. The five packages and two
+  manifests passed downloaded SHA-256 checks, and manifest versions and file
+  SHA-512 values matched. The repository was public at the time of checking.
+- Completed weekly or monthly cycles under this maintenance policy: none.
+- The externally initiated [v0.2.4 release run](https://github.com/infiniwire/chatty-dock/actions/runs/41563808574)
+  completed successfully. No newer release run was in progress when checked.
+
+## 2026-11-02 — initial local assessment
+
+- Checkout `654427e21741bc5846b57fd18a1bc7a093b2977f` matched remote `main`.
+  The checkout was clean before this log was added.
+- Using Node.js 22.23.3, format check, lint, TypeScript, 51 unit tests, build,
+  30 Windows Electron integration checks and the development startup/UI check
+  passed. These tests ran immediately before this maintenance request. The
+  Electron and public-site results are in local ignored files
+  `artifacts/electron-tests.json` and `artifacts/website-check.json`; the
+  development screenshot is `artifacts/development.png`. These generated
+  files may be overwritten by later runs.
+- An isolated, unauthenticated public-site check reached `https://chatgpt.com`,
+  found page content and a login entry, and detected no verification prompt.
+  It does not establish authenticated functionality or ongoing compatibility.
+- The GitHub connector and unauthenticated GitHub API both reported the
+  repository as public. This is an operational blocker, not a scored product
+  defect. No repository visibility change, push, tag or release was performed.
+- No new reproducible product bug was established during this assessment.
+  Known issue AUTH-001 still requires a fresh manual Google sign-in check.
+- Not independently verified in this run: packaged-app checks, actual update
+  installation, abnormal-exit recovery, authenticated uploads/downloads,
+  voice, CAPTCHA or second-factor flows, and native macOS behavior. Existing
+  historical CI results are not evidence of a fresh run.
+- No release was attempted. The first monthly and weekly publication under the
+  new policy remains due, but is blocked by repository visibility and version
+  compatibility; do not mark either period complete.
+
+## 2026-11-02 — version policy amended
+
+- The user replaced the four-part policy with three-part increments of
+  `0.0.1` for daily emergency or weekly maintenance releases and `0.1.0` for
+  monthly releases. Adding `0.1.0` preserves the patch component.
+- The previous four-part compatibility blocker no longer applies. Normal
+  packaging, version comparison, installer-upgrade and release verification
+  remain required. The repository visibility and release-workflow blockers
+  above remain unresolved; no publication cycle was marked complete.
+
+## 2026-11-02 — manual scheduler rehearsal
+
+- This was a manual maintenance run, not a scheduler invocation. No active
+  ChattyDock automation was found in the local automation inventory; timer
+  delivery and timezone behavior remain unverified.
+- Tested commit `2f7afe155947928b8f6d57e0740c7b94706e0e70`, version `0.2.4`,
+  using Node.js 22.23.3. Format, lint, TypeScript, all 57 unit tests, build,
+  the development startup check, and all 31 source and 31 unpacked Windows
+  packaged Electron scenarios passed. The suite includes simulated abrupt-exit
+  download history recovery. A temporary unauthenticated website check reached
+  ChatGPT with content and a login entry, without a detected verification page.
+- Evidence is stored in `artifacts/maintenance/manual-20261103T021338Z/`.
+  These locally ignored files are not a substitute for a durable backup.
+- No new product defect was established. Authenticated behavior, Google login,
+  voice, and real provider challenges remain unverified. The real update
+  installation test is restricted to isolated Windows CI and was not run locally.
+- The repository was still public. No push, new tag or release was initiated
+  during this manual run. The externally initiated `v0.2.4` release workflow
+  subsequently completed successfully, including all three platform builds,
+  the parallel Windows update installation job and collection. The stable
+  release became Latest. All five downloaded packages and both manifests
+  matched the SHA-256 checksum file; manifest versions and listed SHA-512
+  values also matched. Evidence is in `release-v0.2.4-verification.json` in
+  the directory above. The repository privacy requirement remains unmet;
+  do not mark the policy release cycle fully complete on this evidence.
+
+## 2026-11-06 — manual maintenance run
+
+- This was a user-requested manual run; no saved ChattyDock automation was
+  found in the local automation inventory, so scheduled triggering remains
+  unverified. Checkout and remote main both pointed to
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`, version `0.2.4`.
+- With Node.js 22.23.3, format, lint, TypeScript, build, all 57 unit tests,
+  development startup, and 31 source and 31 existing unpacked Windows packaged
+  Electron scenarios passed. The packaged executable was reused from the prior
+  build, not rebuilt during this run.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification prompt. This does not verify signed-in
+  functionality, provider authentication, real uploads/downloads, or voice.
+- No new reproducible product defect was established. The real update installer
+  and macOS builds were not run locally. The evidence files are in the ignored
+  directory `artifacts/maintenance/manual-20261107T061458Z/`.
+- The repository remained public and Latest remained `v0.2.4`. No new release,
+  tag or push was initiated. Publication remains blocked by the private
+  repository requirement; existing publication-cycle records were not changed.
+
+## 2026-11-13 — manual maintenance run
+
+- The local ChattyDock maintenance automation is now marked active and its
+  recurrence specifies every day at 06:00. The stored configuration does not
+  explicitly name a time zone, and actual scheduled delivery has not been
+  independently verified in this run. This run was manually requested.
+- Checkout and remote main matched at commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript,
+  build, 57 unit tests, development startup and 31 source Electron scenarios
+  passed using Node.js 22.23.3. An isolated unauthenticated ChatGPT homepage
+  check found content and a login entry, with no detected verification page.
+- The first launch of the previously generated unpacked Windows package failed
+  in Playwright with `Process failed to launch`. After rebuilding the package,
+  all 31 packaged Electron scenarios passed. The initial cause was not
+  established; treat it as an unclassified test/artifact failure, not a
+  confirmed product defect. Evidence is in the ignored directory
+  `artifacts/maintenance/manual-20261114T035104Z/`.
+- No new product defect was confirmed. Actual provider login, CAPTCHA, voice,
+  macOS and an installed-client upgrade were not verified in this local run.
+  The repository was public, so no release, tag or push was initiated. The
+  latest observed stable release remained `v0.2.4`.
+
+## 2026-11-14 — scheduled maintenance run
+
+- The scheduled heartbeat was delivered at 06:02 Vancouver time, as calculated
+  by Node.js 22.23.3 using IANA tzdata 2026c. This verifies a scheduled
+  delivery close to 06:00 for this date. The stored recurrence does not name an
+  IANA time zone, so behavior after time-zone configuration changes remains
+  unverified. The host uses British Columbia Standard Time.
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup and 31 source Electron scenarios passed.
+  All 31 packaged Windows Electron scenarios also passed using the unpacked
+  package rebuilt on the previous run. The isolated unauthenticated ChatGPT
+  homepage check found content and a login entry, without a detected challenge.
+- No new reproducible product defect was identified. Provider login, CAPTCHA,
+  voice, macOS and real installed-client upgrade remain unverified locally.
+  Evidence is in the ignored directory
+  `artifacts/maintenance/scheduled-20261114T130515Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet.
+
+## 2026-11-15 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup, and 31 source and 31 existing unpacked
+  Windows packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261115T130447Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet.
+
+## 2026-11-16 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup, and 31 source and 31 existing unpacked
+  Windows packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261116T130540Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet. This week's
+  maintenance release is due but blocked by that condition.
+
+## 2026-11-17 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup, and 31 source and 31 existing unpacked
+  Windows packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261117T125932Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet. This week's
+  maintenance release remains blocked by that condition.
+
+## 2026-11-18 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup, and 31 source and 31 existing unpacked
+  Windows packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261118T130629Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet. This week's
+  maintenance release remains blocked by that condition.
+
+## 2026-11-19 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup, and 31 source and 31 existing unpacked
+  Windows packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261119T125748Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet. This week's
+  maintenance release remains blocked by that condition.
+
+## 2026-11-20 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup, and 31 source and 31 existing unpacked
+  Windows packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261120T130217Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet. This week's
+  maintenance release remains blocked by that condition.
+
+## 2026-11-21 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. Format, lint, TypeScript, build,
+  57 unit tests, development startup, and 31 source and 31 existing unpacked
+  Windows packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261121T130304Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet. This week's
+  maintenance release remains blocked by that condition.
+
+## 2026-11-21 — startup recovery and website zoom
+
+- START-001, severity 5/10: a hanging initial website request left the native
+  website area empty without an in-content retry prompt. The isolated startup
+  fixture failed before the change and passed afterward. The requested
+  intermittent black screen has not been reproduced against the user's real
+  profile, so its root cause remains uncertain. The local mitigation and website
+  zoom slider are uncommitted and awaiting release.
+- Format, lint, TypeScript, 57 unit tests, source build, startup recovery test,
+  and 31 Electron scenarios passed. The startup recovery test and the 31
+  scenarios also passed against the rebuilt unpacked Windows package. Slider
+  coverage verifies the persisted setting, keyboard control, and website zoom
+  across open windows. An isolated unauthenticated ChatGPT homepage loaded.
+- Evidence is in the ignored directory
+  `artifacts/maintenance/startup-zoom-20261121T193820Z/`. Actual authenticated
+  startup and macOS behavior remain unverified. No release or push was made;
+  the required private-repository condition was previously observed unmet.
+
+## 2026-11-22 — scheduled maintenance run
+
+- Checkout and remote main matched commit
+  `2f7afe155947928b8f6d57e0740c7b94706e0e70`. The authorized uncommitted
+  START-001 mitigation and website zoom slider were retained and tested.
+  Format, lint, TypeScript, build, 57 unit tests, development startup, the
+  startup recovery scenario, and 31 source and 31 existing unpacked Windows
+  packaged Electron scenarios passed using Node.js 22.23.3.
+- The isolated unauthenticated ChatGPT homepage reported content and a login
+  entry, with no detected verification page. Actual provider login, CAPTCHA,
+  voice, macOS and an installed-client upgrade remain unverified locally.
+- No new reproducible product defect was established. Evidence is in the
+  ignored directory `artifacts/maintenance/scheduled-20261122T130150Z/`.
+- The repository remained public and latest stable release remained `v0.2.4`.
+  No push, tag, release or publication-period completion was performed because
+  the required private-repository condition remains unmet. This week's
+  maintenance release remains blocked by that condition.
+
+## 2026-11-22 — themed application icons
+
+- Replaced the default application icon with the approved ChatGPT-style mark
+  and Dock badge, and added dark and light runtime variants. Windows window and
+  taskbar icons and the macOS Dock icon follow the application theme; packaged
+  shortcuts and the macOS application bundle use the default icon.
+- Format, lint, TypeScript, 57 unit tests, source build, startup recovery,
+  development startup and 32 source Electron scenarios passed. The startup
+  recovery test and 32 Electron scenarios passed against a rebuilt Windows
+  package, including theme-driven icon changes. The light and dark resources
+  were present in the unpacked package. Native macOS behavior is unverified.
+- A first packaged startup-test attempt timed out waiting for its initially
+  selected window. The test now waits for the trusted local shell before
+  interacting; the packaged rerun passed. This is recorded as a test-harness
+  issue, not a confirmed product defect or a scored release trigger.
+- Evidence is in the ignored directory
+  `artifacts/maintenance/theme-icons-20261123T003638Z/`. The changes are
+  uncommitted and unreleased; the repository remained public when checked.
+
+## 2026-11-22 — local release preparation
+
+- The user requested deployment, then confirmed that the repository should
+  remain public for now. The prior private-only publication rule therefore
+  continues to block pushing and publishing.
+- Prepared the uncommitted `0.3.4` monthly release candidate from the latest
+  observed stable version `0.2.4`. The candidate contains START-001's
+  mitigation, the zoom slider and the themed application icons. No tag or
+  release was created, and no publication cycle was marked complete.
+- Candidate verification passed: formatting, lint, TypeScript, 57 unit tests,
+  source build, the startup recovery scenario, and 32 Electron integration
+  scenarios in both source and unpacked Windows builds. A Windows NSIS installer
+  was generated locally; its SHA-256 is
+  `dcb18e89e69b064ea57c06df8ec252d102e3f047efebee13b0dbadf5e3f07a45`.
+  The installer is unsigned and has not been installed or tested as an upgrade.
+  macOS builds, real provider authentication and the release workflow remain
+  unverified for this candidate. Evidence is in the ignored directory
+  `artifacts/maintenance/release-candidate-20261123T004402Z/`.
+
+## 2026-11-22 — public release authorized
+
+- The user explicitly replaced the private-only publication rule and
+  authorized this release while the repository remains public. The recurring
+  maintenance automation was updated to follow the new rule without changing
+  repository visibility.
+- Candidate `0.3.4` remains the outstanding monthly release. Local preparation
+  and validation are in progress; no release period is complete until all
+  platform builds, update installation checks and post-publication checks pass.
+- The candidate passed format, lint, TypeScript, 59 unit tests, the startup
+  recovery test and 32 source Electron scenarios. Its previously built Windows
+  package passed the startup recovery test and 32 packaged scenarios. The
+  English release notes are generated from the candidate's changelog entry.
+- Existing clients still require configured GitHub credentials for update
+  checks, including against the public repository. Ad-hoc macOS builds remain
+  manual-update only.
+
+## Issue and backlog register
+
+| ID        | Score        | Status                                      | Fix commit               | Verification                                                               |
+| --------- | ------------ | ------------------------------------------- | ------------------------ | -------------------------------------------------------------------------- |
+| START-001 | 5/10         | Candidate mitigation; unreleased            | Candidate release commit | Fixture failed before and passed after; original report needs confirmation |
+| AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md`    | Fresh manual provider login not verified                                   |
+
+Future newly confirmed product issues must record reproduction and evidence,
+impact and score rationale, root cause, fix, and failing-before/passing-after
+verification. Record test or environment failures separately from product bugs.

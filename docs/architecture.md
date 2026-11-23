@@ -25,6 +25,8 @@ Profile UUIDs select `persist:profile-<uuid>` partitions. Display names never de
 
 Second process launches hand off to the existing coordinator. Windows hold their own remote views and history. When a window closes without downloads, its remote WebContents closes explicitly. A view with downloads is retained until completion and then closed. macOS keeps the app available after the last window closes; activation creates a window. On Windows the app quits when no windows or transfers remain.
 
+During a view's first top-level navigation, the local shell shows a connecting state instead of exposing an uninitialized website surface. If that navigation has not committed after 20 seconds, the shell offers a retry; a later successful navigation can still recover. This does not inspect website content or diagnose a blank page after navigation has committed.
+
 Settings writes are debounced, serialized, and atomically renamed. A corrupt settings file is preserved with a recovery filename; browser profile directories are not deleted. Saved website locations omit query strings/fragments and must pass the content URL policy before restoration.
 
 ## Downloads

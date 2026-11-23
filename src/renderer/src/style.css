@@ -542,6 +542,21 @@ label {
   height: 72px;
   margin: 0 auto;
 }
+.app-icon-dark,
+:root[data-theme='dark'] .app-icon-light {
+  display: none;
+}
+:root[data-theme='dark'] .app-icon-dark {
+  display: block;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .app-icon-light {
+    display: none;
+  }
+  :root:not([data-theme='light']) .app-icon-dark {
+    display: block;
+  }
+}
 .about h2 {
   font-size: 26px;
   margin-top: 20px;
@@ -1122,6 +1137,26 @@ details[open] .disclosure-chevron {
   text-align: center;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+.zoom-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.zoom-slider-row label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.zoom-slider-row input {
+  flex: 1;
+  min-width: 70px;
+  accent-color: var(--accent);
+}
+.zoom-slider-row span {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
 }
 .reset-zoom {
   display: block;

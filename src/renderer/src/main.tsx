@@ -354,6 +354,16 @@ function App(): React.JSX.Element {
             <button onClick={() => panel('profiles')}>Check profiles</button>
           </div>
         </main>
+      ) : state.starting ? (
+        <main className="workspace">
+          <div className="empty" role="status">
+            <span className="empty-icon is-loading">
+              <RotateCw aria-hidden="true" />
+            </span>
+            <h1>Opening ChatGPT</h1>
+            <p>Connecting to the website…</p>
+          </div>
+        </main>
       ) : null}
     </>
   );

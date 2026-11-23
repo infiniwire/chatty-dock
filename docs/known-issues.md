@@ -1,5 +1,12 @@
 # Known issues
 
+## START-001: a stalled initial website request leaves an empty surface
+
+- Severity: 5/10. Affected windows can appear blank during an initial network stall, but the toolbar remains available and reloading can recover.
+- Reproduction: start a window whose saved website location accepts a connection but never returns a response. Previously the local fixture kept the website area empty and did not provide a retry message. The user's intermittent black screen has a similar symptom, but its root cause has not been confirmed.
+- Correction in the unreleased working tree: show a local connecting state until the initial navigation commits, and offer retry after 20 seconds. Retry reloads the saved safe location when no website URL has committed. The timeout does not inspect page or account content.
+- Regression: `npm run test:startup` initially failed because no Retry button appeared; after the correction it passed for source and packaged Windows builds. The synthetic timeout is shortened in isolated test mode. `artifacts/startup-recovery.png` captures the fixture's retry UI. Real user sessions and other possible causes of a black page remain unverified.
+
 ## UPD-002: a new file download can be interrupted by an update restart
 
 - Status: correction included in 0.2.4.

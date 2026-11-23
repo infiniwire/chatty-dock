@@ -53,7 +53,9 @@ const config = {
   files: ['out/**', 'package.json', '!**/*.map'],
   extraResources: [
     { from: 'build/icon.png', to: 'icon.png' },
+    { from: 'build/icon-light.png', to: 'icon-light.png' },
     ...(mac ? [] : [{ from: 'build/icon.ico', to: 'icon.ico' }]),
+    ...(mac ? [] : [{ from: 'build/icon-light.ico', to: 'icon-light.ico' }]),
   ],
   asar: true,
   artifactName: 'ChattyDock-${version}-${os}-${arch}.${ext}',
