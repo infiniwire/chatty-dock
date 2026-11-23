@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5
+
+- Make the startup recovery integration test select the intended application window when remote views are exposed to the test framework out of order.
+- Run the scheduled weekly compatibility and release checks.
+
 ## 0.3.4
 
 - Show a connecting state for the initial website navigation and offer a retry when the request stalls before the page opens.

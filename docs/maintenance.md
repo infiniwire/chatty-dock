@@ -6,7 +6,7 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 ## Current state
 
 - Repository: `infiniwire/chatty-dock`; working checkout: `D:\Github\chatty-dock`.
-- Release status: **preparing**. On 2026-11-22, the user authorized normal
+- Release status: **preparing weekly 0.3.5**. On 2026-11-22, the user authorized normal
   pushes and releases whether the repository is public or private. Do not
   change repository visibility from this maintenance task.
 - Version policy: three-part `A.B.C`. A daily emergency or weekly maintenance
@@ -18,20 +18,16 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 - Release workflow configuration at commit `2f7afe1` has a separate
   `update-install` job parallel to the three platform builds, and ordinary CI
   does not run the update installation test.
-- Verified changes awaiting release: START-001 has a mitigation for a stalled
-  initial request; the website zoom slider and themed application icons are
-  included in the candidate. The reported intermittent black screen may have
-  other causes and still needs user confirmation.
-- Local release candidate: `0.3.4`, prepared for the first outstanding monthly
-  release under the requested `+0.1.0` policy. Do not mark any release period
-  complete until all release conditions pass.
-- Latest observed stable release: [v0.2.4](https://github.com/infiniwire/chatty-dock/releases/tag/v0.2.4),
-  commit `2f7afe155947928b8f6d57e0740c7b94706e0e70`. The five packages and two
-  manifests passed downloaded SHA-256 checks, and manifest versions and file
-  SHA-512 values matched. The repository was public at the time of checking.
-- Completed weekly or monthly cycles under this maintenance policy: none.
-- The externally initiated [v0.2.4 release run](https://github.com/infiniwire/chatty-dock/actions/runs/41563808574)
-  completed successfully. No newer release run was in progress when checked.
+- Verified changes awaiting release: the startup test now selects the correct
+  local application shell instead of a racing remote view; this is a test-only
+  correction. The reported intermittent black screen may have other causes
+  and still needs user confirmation.
+- Latest stable release: [v0.3.4](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.4),
+  commit `cef0d0f3438702e0aa50c84e3ea6b519f864f449`. Downloaded packages and
+  manifests passed checksum verification. Repository visibility is public.
+- Completed periods: November 2026 monthly and November 16–22 weekly. The
+  November 23–29 weekly release is due. Candidate `0.3.5` is not complete
+  until all release conditions and post-publication checks pass.
 
 ## 2026-11-02 — initial local assessment
 
@@ -380,6 +376,35 @@ Monday through Sunday. Preserve previous entries when recording future runs.
   affected profile. Real provider login remains unverified. The update client
   still requires GitHub credentials even for a public repository, and ad-hoc
   macOS packages require manual updates.
+
+## 2026-11-23 — scheduled maintenance and weekly candidate
+
+- The weekly release is due for November 23–29. Prepared `0.3.5`; publication
+  remains pending until all release and post-publication checks pass. The last
+  completed release is `0.3.4` on November 22. No other release was in progress.
+- TEST-001 (test harness only; product severity 0/10): the Windows CI jobs in
+  [run 45091330385](https://github.com/infiniwire/chatty-dock/actions/runs/45091330385)
+  and [run 45092214236](https://github.com/infiniwire/chatty-dock/actions/runs/45092214236)
+  failed at startup recovery because the first Playwright `window` event was
+  the original fixture view, whose accessibility snapshot showed `Conversation
+fixture`, rather than the new application shell. The test now identifies
+  the intended shell by its window number, regardless of page event order. The
+  original failure is evidenced by both CI logs; the corrected source and
+  packaged tests passed locally. Remote CI validation remains pending.
+- Using Node.js 22.23.3, format, lint, TypeScript, 59 unit tests, source build,
+  development startup, startup recovery, and 32 Electron scenarios passed.
+  The `0.3.5` unpacked Windows package passed startup recovery and the same 32
+  scenarios using isolated test data. Results and screenshots are in the
+  evidence directory below. No new product defect was confirmed.
+- An isolated, unauthenticated Electron profile loaded the current ChatGPT
+  homepage, with login controls and no detected verification screen. Evidence
+  including its screenshot is in `artifacts/maintenance/scheduled-20261123T130004Z/`.
+  Real authentication, CAPTCHA and two-factor verification were not attempted.
+- The Windows host uses British Columbia time and started at 06:00 local time.
+  Its Node.js ICU timezone data incorrectly reports the old winter offset for
+  `America/Vancouver`: British Columbia adopted year-round daylight time in 2026. Do not use this outdated Node.js timezone data alone to decide dates
+  or release periods; verify against updated timezone data or current local
+  authorities. No fixed UTC offset is prescribed by this maintenance policy.
 
 ## Issue and backlog register
 

@@ -61,13 +61,34 @@ try {
     .pages()
     .find((page) => page.url().startsWith('dock://ui/'));
   await owner.waitForFunction(() => Boolean(window.dock));
-  const nextWindow = application.waitForEvent('window');
   const result = await owner.evaluate(
     (id) => window.dock.command({ type: 'new-window', profileId: id }),
     stalledProfileId,
   );
   expect(result.ok).toBe(true);
-  const page = await nextWindow;
+  // Playwright exposes both shell windows and remote WebContentsViews as pages.
+  // A delayed event for the first window's fixture can arrive after this command.
+  // Select the new shell by its own window number, not by event arrival order.
+  let page;
+  await expect
+    .poll(
+      async () => {
+        for (const candidate of application.context().pages()) {
+          if (candidate === owner || !candidate.url().startsWith('dock://ui/')) continue;
+          const number = await candidate
+            .locator('.window-number')
+            .textContent()
+            .catch(() => null);
+          if (number === '2') {
+            page = candidate;
+            return true;
+          }
+        }
+        return false;
+      },
+      { timeout: 45000 },
+    )
+    .toBe(true);
   await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible({
     timeout: 5000,
   });
