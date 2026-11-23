@@ -6,7 +6,7 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 ## Current state
 
 - Repository: `infiniwire/chatty-dock`; working checkout: `D:\Github\chatty-dock`.
-- Release status: **preparing weekly 0.3.5**. On 2026-11-22, the user authorized normal
+- Release status: **v0.3.5 published**. On 2026-11-22, the user authorized normal
   pushes and releases whether the repository is public or private. Do not
   change repository visibility from this maintenance task.
 - Version policy: three-part `A.B.C`. A daily emergency or weekly maintenance
@@ -18,16 +18,14 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 - Release workflow configuration at commit `2f7afe1` has a separate
   `update-install` job parallel to the three platform builds, and ordinary CI
   does not run the update installation test.
-- Verified changes awaiting release: the startup test now selects the correct
-  local application shell instead of a racing remote view; this is a test-only
-  correction. The reported intermittent black screen may have other causes
-  and still needs user confirmation.
-- Latest stable release: [v0.3.4](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.4),
-  commit `cef0d0f3438702e0aa50c84e3ea6b519f864f449`. Downloaded packages and
+- Verified changes awaiting release: none recorded. The startup test correction
+  is included in `v0.3.5`; the reported intermittent black screen may have
+  other causes and still needs user confirmation.
+- Latest stable release: [v0.3.5](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.5),
+  commit `2b1a06bedd2ffd64b4d6a5bf6e20b8c4944fc7a3`. Downloaded packages and
   manifests passed checksum verification. Repository visibility is public.
-- Completed periods: November 2026 monthly and November 16–22 weekly. The
-  November 23–29 weekly release is due. Candidate `0.3.5` is not complete
-  until all release conditions and post-publication checks pass.
+- Completed periods: November 2026 monthly and the November 16–22 and
+  November 23–29 weekly cycles. No release job is in progress or failed.
 
 ## 2026-11-02 — initial local assessment
 
@@ -414,12 +412,32 @@ fixture`, rather than the new application shell. The test now identifies
   or release periods; verify against updated timezone data or current local
   authorities. No fixed UTC offset is prescribed by this maintenance policy.
 
+## 2026-11-23 — weekly release completed
+
+- Published stable [v0.3.5](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.5)
+  from commit `2b1a06bedd2ffd64b4d6a5bf6e20b8c4944fc7a3`, completing the
+  November 23–29 weekly cycle. The repository remains public. No further
+  release is due for this local date.
+- [CI run 45181721512](https://github.com/infiniwire/chatty-dock/actions/runs/45181721512)
+  passed all three platform checks. The corrected startup fixture also passed
+  the Windows CI runner, but the exact cause of the preceding retry timeout is
+  not proved. [Release run 45182526261](https://github.com/infiniwire/chatty-dock/actions/runs/45182526261)
+  passed all three platform builds and packaged tests, the parallel Windows
+  silent upgrade and relaunch test, and publication.
+- The release is stable and Latest with all eight expected assets. Downloaded
+  packages and manifests passed SHA-256 checks; manifest versions are `0.3.5`
+  and listed SHA-512 hashes match. Evidence is in
+  `artifacts/maintenance/scheduled-20261123T130004Z/release-v0.3.5-verification.json`.
+  Authenticated provider behavior remains unverified; existing update access
+  still requires GitHub credentials and ad-hoc macOS updates remain manual.
+
 ## Issue and backlog register
 
 | ID        | Score        | Status                                      | Fix commit            | Verification                                                               |
 | --------- | ------------ | ------------------------------------------- | --------------------- | -------------------------------------------------------------------------- |
 | START-001 | 5/10         | Mitigation released in v0.3.4               | `cef0d0f`             | Fixture failed before and passed after; original report needs confirmation |
 | AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md` | Fresh manual provider login not verified                                   |
+| TEST-001  | 0/10         | Test harness correction released in v0.3.5  | `4a9c2d7`, `2b1a06b`  | Prior CI failure; source, packaged and three-platform CI checks passed     |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after
