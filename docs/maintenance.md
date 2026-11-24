@@ -18,9 +18,10 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 - Release workflow configuration at commit `2f7afe1` has a separate
   `update-install` job parallel to the three platform builds, and ordinary CI
   does not run the update installation test.
-- Verified changes awaiting release: none recorded. The startup test correction
-  is included in `v0.3.5`; the reported intermittent black screen may have
-  other causes and still needs user confirmation.
+- Changes awaiting release: SEC-001 updates Electron to mitigate a vendor
+  security advisory. The fix passed local dependency and application regression
+  checks; cross-platform CI is pending. The startup test correction is included
+  in `v0.3.5`; the reported intermittent black screen still needs confirmation.
 - Latest stable release: [v0.3.5](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.5),
   commit `2b1a06bedd2ffd64b4d6a5bf6e20b8c4944fc7a3`. Downloaded packages and
   manifests passed checksum verification. Repository visibility is public.
@@ -431,6 +432,40 @@ fixture`, rather than the new application shell. The test now identifies
   Authenticated provider behavior remains unverified; existing update access
   still requires GitHub credentials and ad-hoc macOS updates remain manual.
 
+## 2026-11-24 — scheduled maintenance
+
+- Clean checkout `48b7a57933e944924113de1a9a6fe22c784b040f` matched remote
+  `main`. Stable `v0.3.5` remains Latest, with no unfinished release. The
+  November monthly and November 23–29 weekly cycles were already completed.
+  The repository remains public; no release was triggered for this run.
+- SEC-001, severity 8/10: the Electron 44.9.0 shipped in the latest release
+  falls within the range of upstream advisory
+  [GHSA-jr5w-w6x2-84p9](https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9).
+  An attacker with an affected certificate and network interception capability
+  could impersonate a server and expose session or page data. The score reflects
+  the potentially serious consequences and specific prerequisites; no actual
+  interception was reproduced or observed. This is not a 9–10 release trigger.
+- Before the fix, full `npm audit` reported the Electron advisory; `--omit=dev`
+  did not report it because Electron is classified as a development dependency
+  despite being the packaged runtime. Updated Electron to 44.11.5, above the
+  upstream patched version 44.9.1. Afterward, the full audit no longer reported
+  an Electron advisory; 15 moderate development-tool findings remain separately.
+  The fix is in the unreleased backlog. An actual compromised-certificate attack
+  was not reproduced, so mitigation of that attack relies on upstream evidence.
+- With Node.js 22.23.3, formatting, lint, TypeScript, 59 unit tests, build,
+  development startup, startup recovery, and 32 Electron integration scenarios
+  passed both before and after the change. The rebuilt Windows package using
+  Electron 44.11.5 passed startup recovery and 32 packaged scenarios. An isolated,
+  unauthenticated profile loaded the real ChatGPT homepage before and after the
+  change. Authenticated login, CAPTCHA, two-factor and real-user black-screen
+  behavior remain unverified. Cross-platform CI and a future release's installer
+  upgrade and platform packaging checks remain required.
+- Evidence, including before/after audits, logs, screenshots and the isolated
+  Windows package, is in `artifacts/maintenance/scheduled-20261124T130228Z/`.
+  The Windows host uses British Columbia local time and this run started near
+  06:00. The previously recorded Node/ICU timezone-data discrepancy persists;
+  it was not used to determine this run's local date or release cycle.
+
 ## Issue and backlog register
 
 | ID        | Score        | Status                                      | Fix commit            | Verification                                                               |
@@ -438,6 +473,7 @@ fixture`, rather than the new application shell. The test now identifies
 | START-001 | 5/10         | Mitigation released in v0.3.4               | `cef0d0f`             | Fixture failed before and passed after; original report needs confirmation |
 | AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md` | Fresh manual provider login not verified                                   |
 | TEST-001  | 0/10         | Test harness correction released in v0.3.5  | `4a9c2d7`, `2b1a06b`  | Prior CI failure; source, packaged and three-platform CI checks passed     |
+| SEC-001   | 8/10         | Locally verified; unreleased                | `82f8a67`             | Advisory removed from audit; app and packaged checks passed; CI pending    |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after
