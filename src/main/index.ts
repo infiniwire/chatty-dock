@@ -35,6 +35,8 @@ import { Updates } from './updates';
 import { ChatTypography, toolbarHeight } from './typography';
 import { SignInTrace } from './sign-in-trace';
 import { WindowSurface, surfaceCookieHeader } from './window-surface';
+import { MediaPermissions } from './media-permissions';
+import { showContextMenu } from './context-menu';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'dock', privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -386,7 +388,27 @@ function configureSession(profileId: string): Session {
     }
     callback({ requestHeaders: details.requestHeaders });
   });
-  ses.setPermissionCheckHandler(() => false);
+  const media = new MediaPermissions(fixture);
+  ses.setPermissionCheckHandler((contents, permission, requestingOrigin, details) => {
+    if (permission !== 'media' || !contents || !windows.has(owners.get(contents.id) ?? -1))
+      return false;
+    const origin = media.origin(
+      details.requestingUrl ?? requestingOrigin,
+      contents.getURL(),
+      details.isMainFrame,
+    );
+    if (
+      !origin ||
+      media.origin(requestingOrigin, contents.getURL(), details.isMainFrame) !== origin
+    )
+      return false;
+    if (
+      details.securityOrigin &&
+      media.origin(details.securityOrigin, contents.getURL(), details.isMainFrame) !== origin
+    )
+      return false;
+    return media.has(origin, media.types([details.mediaType]));
+  });
   ses.setPermissionRequestHandler((contents, permission, callback, details) => {
     if (
       permission !== 'media' ||
@@ -397,22 +419,54 @@ function configureSession(profileId: string): Session {
       return;
     }
     const owner = windows.get(owners.get(contents.id) ?? -1);
-    if (!owner) {
+    const origin = media.origin(details.requestingUrl, contents.getURL(), details.isMainFrame);
+    const mediaDetails = details as Electron.MediaAccessPermissionRequest;
+    const types = media.types(mediaDetails.mediaTypes);
+    if (
+      !owner ||
+      !origin ||
+      (mediaDetails.mediaTypes?.length && !types.length) ||
+      (mediaDetails.securityOrigin &&
+        media.origin(mediaDetails.securityOrigin, contents.getURL(), details.isMainFrame) !==
+          origin)
+    ) {
       callback(false);
       return;
     }
+    if (media.has(origin, types)) {
+      callback(true);
+      return;
+    }
+    const requested =
+      types.length === 2
+        ? 'microphone and camera'
+        : types[0] === 'audio'
+          ? 'microphone'
+          : types[0] === 'video'
+            ? 'camera'
+            : 'microphone or camera';
     void dialog
       .showMessageBox(owner.win, {
         type: 'question',
         title: 'Media permission',
-        message: 'Allow this ChatGPT page to use your microphone or camera?',
+        message: `Allow this ChatGPT page to use your ${requested}?`,
         detail:
-          'This approval applies to this request only. Your operating system may also ask for permission.',
+          'Approval lasts until the app closes and applies only to this login profile and website. Your operating system may also ask for permission.',
         buttons: ['Deny', 'Allow'],
         defaultId: 0,
         cancelId: 0,
       })
-      .then((result) => callback(result.response === 1))
+      .then((result) => {
+        const allowed =
+          result.response === 1 &&
+          !contents.isDestroyed() &&
+          !owner.win.isDestroyed() &&
+          owner.profileId === profileId &&
+          owners.get(contents.id) === owner.win.id &&
+          media.origin(details.requestingUrl, contents.getURL(), details.isMainFrame) === origin;
+        if (allowed) media.remember(origin, types);
+        callback(allowed);
+      })
       .catch(() => callback(false));
   });
   downloads.attach(ses, profileId);
@@ -421,6 +475,10 @@ function configureSession(profileId: string): Session {
 function secureRemote(contents: WebContents, profileId: string, ownerId: number): void {
   owners.set(contents.id, ownerId);
   contents.once('destroyed', () => owners.delete(contents.id));
+  contents.on('context-menu', (_event, params) => {
+    const owner = BrowserWindow.fromWebContents(contents) ?? windows.get(ownerId)?.win;
+    if (owner) showContextMenu(contents, owner, params, openExternal, fixture);
+  });
   const trace = (event: Parameters<SignInTrace['record']>[0], url: string, code?: number): void => {
     const owner = windows.get(ownerId);
     const kind = urlKind(url, fixture);

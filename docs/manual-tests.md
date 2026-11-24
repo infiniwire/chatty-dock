@@ -49,6 +49,7 @@ Record operating system, architecture, app version, and installation/signing mod
 - [ ] Close extra windows and confirm resources settle without accumulating remote views.
 - [ ] Test large code blocks, formulas, images, selection/copy, and streaming output.
 - [ ] Disconnect networking and verify useful retry behavior.
-- [ ] If voice is needed, check application and operating-system permission prompts.
+- [ ] If voice is needed, check application and operating-system permission prompts; confirm an approval is reused for the same device during this run, isolated from another login profile, and requested again after restarting the app.
+- [ ] Right-click an editable message, selected text, a link and an image; verify relevant actions and external-browser routing. On Windows, check that the Emoji item opens the system picker.
 
 Do not claim long-conversation improvements without comparable measured evidence. Do not label restricted login providers as supported merely because their pages load.

@@ -563,6 +563,36 @@ fixture`, rather than the new application shell. The test now identifies
   and both update manifests matched SHA-256, and manifest versions and SHA-512
   entries matched. Evidence: `artifacts/maintenance/public-update-20261124/release-v0.3.8-verification.json`.
 
+## 2026-11-24 — issue 1 feature evaluation
+
+- [Issue 1](https://github.com/infiniwire/chatty-dock/issues/1) requests editing
+  context menus, the Windows emoji picker, and session-only media approvals.
+  The proposed implementation is present locally and is not yet released.
+- Real Electron fixture checks exercise the context menu, its edit and link
+  actions, blocked links, copied image addresses, and the Windows emoji API
+  boundary. Fake media devices and an isolated profile verify microphone and
+  camera approvals, per-profile isolation, denial and reset after restart.
+  These checks do not exercise real devices, authenticated ChatGPT voice, or
+  a human interacting with the native emoji panel. Operating-system permissions
+  still apply. The documented security policy denies other permission types.
+- On Windows, format, lint, TypeScript, 64 unit tests, source and packaged
+  builds, startup recovery and 34 real Electron integration checks passed.
+  The packaged tests use the same temporary fixture profile and fake devices.
+- This is a feature request, not a scored product bug. Preserve these changes
+  in the unreleased backlog until validated and incorporated into a release.
+- Follow-up Windows validation passed formatting, lint, TypeScript, 66 unit
+  tests, and 34 source and 34 packaged Electron scenarios. The local suite
+  isolates the system clipboard and explicitly skips real image clipboard
+  paste; pull request CI exercises it on disposable runners. Tests include
+  real undo and redo in the embedded page and the permissions fixture.
+- The source and packaged applications loaded the unauthenticated live ChatGPT
+  page in fresh temporary profiles; screenshots and status are saved as
+  `artifacts/website-check-{source,packaged}.{png,json}`. A packaged anonymous
+  public update check reported the current release and a fixture reached its
+  download stage. These checks do not establish authenticated voice or a
+  completed production update installation. Pull request CI additionally
+  exercises unpacked applications on Windows and both Mac architectures.
+
 ## Issue and backlog register
 
 | ID        | Score        | Status                                      | Fix commit            | Verification                                                               |

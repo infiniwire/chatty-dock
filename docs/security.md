@@ -16,7 +16,7 @@
 
 ## Permissions
 
-Unnecessary permissions are denied. Microphone/camera requests from the permitted content origin require a native approval dialog and remain subject to operating system approval. Passive permission checks do not auto-grant access. Screen capture and other permissions are not automatically enabled.
+Unnecessary permissions are denied. Microphone and camera requests from the top-level permitted content origin require a native approval dialog and remain subject to operating system approval. Approved device types are remembered only in memory, separately for each login profile and exact origin, until the app exits. A rejected or ambiguous request is not remembered. Cross-origin frames, screen capture and other permissions are not automatically enabled.
 
 ## Data
 
