@@ -2,6 +2,7 @@
 
 ## UPD-004: public release checks require GitHub credentials
 
+- Status: correction released in v0.3.6.
 - Severity: 9/10. Automatic upgrades are unavailable to public users without a
   GitHub credential; manually downloading an installer remains possible.
 - Reproduction: start an installed 0.3.5 client with no saved token, GitHub
@@ -15,7 +16,7 @@
   credentials and with an unrelated environment token, then passed afterward.
   A real, unauthenticated GitHub release check and Windows packaged checks are
   recorded in the maintenance log. Installation from the GitHub-compatible
-  test feed is a required release CI gate. Existing clients need one manual
+  test feed passed in release CI. Existing clients need one manual
   installation before they can use anonymous updates.
 
 ## SEC-001: Electron trusts compromised eMudhra intermediate certificates
@@ -33,7 +34,7 @@
 - Root cause and mitigation: the shipped Chromium and Node.js TLS stacks lack
   the upstream block for the compromised intermediates. The maintenance fix
   updates Electron from 44.9.0 to 44.11.5, above the vendor's 44.9.1 fix.
-  This is an unreleased fix. No TLS verification is disabled or bypassed.
+  This mitigation was released in v0.3.6. No TLS verification is disabled or bypassed.
 - Verification: the post-upgrade dependency audit no longer lists this
   advisory for Electron. Controlled application regression checks and packaged
   verification are recorded in the maintenance log. An actual intercepted TLS

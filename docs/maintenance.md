@@ -6,7 +6,7 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 ## Current state
 
 - Repository: `infiniwire/chatty-dock`; working checkout: `D:\Github\chatty-dock`.
-- Release status: **v0.3.5 published**. On 2026-11-22, the user authorized normal
+- Release status: **v0.3.6 published**. On 2026-11-22, the user authorized normal
   pushes and releases whether the repository is public or private. Do not
   change repository visibility from this maintenance task.
 - Version policy: three-part `A.B.C`. A daily emergency or weekly maintenance
@@ -18,13 +18,11 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 - Release workflow configuration at commit `2f7afe1` has a separate
   `update-install` job parallel to the three platform builds, and ordinary CI
   does not run the update installation test.
-- Changes awaiting release: UPD-004 enables anonymous public update checks,
-  and SEC-001 updates Electron to mitigate a vendor security advisory. The
-  `0.3.6` emergency release candidate is being verified; no cycle is complete
-  until all publication and post-publication checks pass. The reported
-  intermittent black screen still needs confirmation.
-- Latest stable release: [v0.3.5](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.5),
-  commit `2b1a06bedd2ffd64b4d6a5bf6e20b8c4944fc7a3`. Downloaded packages and
+- UPD-004 and the SEC-001 mitigation were released in v0.3.6. The reported
+  intermittent black screen still needs confirmation. TEST-002, an intermittent
+  Apple Silicon integration timeout and cleanup hang, remains under investigation.
+- Latest stable release: [v0.3.6](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.6),
+  commit `cc915f79ef0de7e77a3486f6b9bcdef5e394f3de`. Downloaded packages and
   manifests passed checksum verification. Repository visibility is public.
 - Completed periods: November 2026 monthly and the November 16–22 and
   November 23–29 weekly cycles. No release job is in progress or failed.
@@ -483,7 +481,7 @@ fixture`, rather than the new application shell. The test now identifies
   real unauthenticated public release check and a controlled GitHub-compatible
   provider check passed locally. The full validation and release workflow,
   including isolated real installation and relaunch, remain publication gates.
-- A `0.3.6` daily emergency release is being prepared for the 9/10 correction,
+- A `0.3.6` daily emergency release was prepared for the 9/10 correction,
   with the verified SEC-001 Electron mitigation included. Evidence is stored in
   `artifacts/maintenance/public-update-20261124/`. The already-completed weekly
   and monthly cycles do not trigger additional releases.
@@ -493,6 +491,26 @@ fixture`, rather than the new application shell. The test now identifies
   unsigned-build guard stopped the checks. The test now models a Developer ID
   signature. The production signature guard is unchanged. Local tests passed;
   a new cross-platform CI run must pass before a release tag is created.
+- Candidate CI [run 45486250581](https://github.com/infiniwire/chatty-dock/actions/runs/45486250581)
+  passed on all three architectures at `cc915f79ef0de7e77a3486f6b9bcdef5e394f3de`.
+  Tag `v0.3.6` points to that commit. [Release run 45487228525](https://github.com/infiniwire/chatty-dock/actions/runs/45487228525)
+  succeeded on its second attempt: Windows and Intel Mac builds and the isolated Windows update
+  installation test passed. The first Apple Silicon attempt timed out after an
+  Electron integration assertion waiting five seconds for closed-window web
+  contents to be released; cleanup then did not exit before the job timeout.
+  Evidence: job `138775911915`, `scripts/electron-test.mjs:1606`. The product
+  cause is unconfirmed (TEST-002, 0/10 until a product defect is established).
+  Retrying that job on the same tag and commit passed both source and packaged
+  tests. No product fix is claimed for the intermittent assertion or cleanup.
+- Stable [v0.3.6](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.6)
+  is Latest and points to the expected commit. The repository remains public as
+  authorized. All five downloaded installers and archives and both update
+  manifests matched SHA-256; manifest versions and SHA-512 entries also matched.
+  Evidence: `artifacts/maintenance/public-update-20261124/release-v0.3.6-verification.json`.
+  Windows installation testing upgraded 0.3.6 to a controlled 0.3.7 release
+  without credentials and verified download integrity, restart and profile.
+  Existing clients need one manual installation; ad-hoc macOS builds still
+  require manual updates. No additional publication is due on 2026-11-24.
 
 ## Issue and backlog register
 
@@ -501,8 +519,9 @@ fixture`, rather than the new application shell. The test now identifies
 | START-001 | 5/10         | Mitigation released in v0.3.4               | `cef0d0f`             | Fixture failed before and passed after; original report needs confirmation |
 | AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md` | Fresh manual provider login not verified                                   |
 | TEST-001  | 0/10         | Test harness correction released in v0.3.5  | `4a9c2d7`, `2b1a06b`  | Prior CI failure; source, packaged and three-platform CI checks passed     |
-| SEC-001   | 8/10         | Validated; unreleased                       | `82f8a67`             | Advisory removed from audit; app, packaged and three-platform CI passed    |
-| UPD-004   | 9/10         | Correction; release validation in progress  | Pending               | Anonymous feed regressions and local real-provider check pass              |
+| SEC-001   | 8/10         | Mitigation released in v0.3.6               | `82f8a67`             | Advisory removed from audit; app, packaged and three-platform CI passed    |
+| UPD-004   | 9/10         | Correction released in v0.3.6               | `434aa4a`             | Anonymous provider and Windows installation upgrade passed                 |
+| TEST-002  | 0/10         | Intermittent failure; cause unconfirmed     | Not fixed             | Apple Silicon release test timed out; same-commit retry passed             |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after
