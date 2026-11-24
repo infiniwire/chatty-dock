@@ -20,7 +20,7 @@ Monday through Sunday. Preserve previous entries when recording future runs.
   does not run the update installation test.
 - Changes awaiting release: SEC-001 updates Electron to mitigate a vendor
   security advisory. The fix passed local dependency and application regression
-  checks; cross-platform CI is pending. The startup test correction is included
+  checks and three-platform CI. The startup test correction is included
   in `v0.3.5`; the reported intermittent black screen still needs confirmation.
 - Latest stable release: [v0.3.5](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.5),
   commit `2b1a06bedd2ffd64b4d6a5bf6e20b8c4944fc7a3`. Downloaded packages and
@@ -458,7 +458,8 @@ fixture`, rather than the new application shell. The test now identifies
   Electron 44.11.5 passed startup recovery and 32 packaged scenarios. An isolated,
   unauthenticated profile loaded the real ChatGPT homepage before and after the
   change. Authenticated login, CAPTCHA, two-factor and real-user black-screen
-  behavior remain unverified. Cross-platform CI and a future release's installer
+  behavior remain unverified. [CI run 45400794496](https://github.com/infiniwire/chatty-dock/actions/runs/45400794496)
+  passed on Windows, Intel Mac and Apple Silicon Mac. A future release's installer
   upgrade and platform packaging checks remain required.
 - Evidence, including before/after audits, logs, screenshots and the isolated
   Windows package, is in `artifacts/maintenance/scheduled-20261124T130228Z/`.
@@ -473,7 +474,7 @@ fixture`, rather than the new application shell. The test now identifies
 | START-001 | 5/10         | Mitigation released in v0.3.4               | `cef0d0f`             | Fixture failed before and passed after; original report needs confirmation |
 | AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md` | Fresh manual provider login not verified                                   |
 | TEST-001  | 0/10         | Test harness correction released in v0.3.5  | `4a9c2d7`, `2b1a06b`  | Prior CI failure; source, packaged and three-platform CI checks passed     |
-| SEC-001   | 8/10         | Locally verified; unreleased                | `82f8a67`             | Advisory removed from audit; app and packaged checks passed; CI pending    |
+| SEC-001   | 8/10         | Validated; unreleased                       | `82f8a67`             | Advisory removed from audit; app, packaged and three-platform CI passed    |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after
