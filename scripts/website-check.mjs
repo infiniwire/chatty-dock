@@ -60,6 +60,34 @@ try {
       screenshot: (await contents.capturePage()).toDataURL(),
     };
   });
+  if (!status.verification) {
+    const website = application
+      .context()
+      .pages()
+      .find((entry) => entry.url().startsWith(status.origin));
+    if (!website) throw new Error('The live ChatGPT page was not available to the test.');
+    const composer = website
+      .locator('#prompt-textarea, [contenteditable="true"], textarea')
+      .first();
+    await expect(composer).toBeVisible({ timeout: 15000 });
+    await application.evaluate(({ app, Menu }) => {
+      app.__websiteMenuBuild = Menu.buildFromTemplate;
+      Menu.buildFromTemplate = (template) => {
+        const menu = app.__websiteMenuBuild(template);
+        app.__websiteMenu = menu;
+        menu.popup = () => {};
+        return menu;
+      };
+    });
+    await composer.click({ button: 'right' });
+    const labels = await application.evaluate(({ app }) =>
+      app.__websiteMenu?.items.map((item) => item.label),
+    );
+    expect(labels).toEqual(
+      expect.arrayContaining(['Undo', 'Redo', 'Cut', 'Copy', 'Paste', 'Select All']),
+    );
+    status.contextMenuEditCommands = true;
+  }
   await fs.mkdir('artifacts', { recursive: true });
   await fs.writeFile('artifacts/website-check.json', JSON.stringify(status, null, 2));
   await fs.writeFile(

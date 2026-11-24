@@ -586,7 +586,8 @@ fixture`, rather than the new application shell. The test now identifies
   paste; pull request CI exercises it on disposable runners. Tests include
   real undo and redo in the embedded page and the permissions fixture.
 - The source and packaged applications loaded the unauthenticated live ChatGPT
-  page in fresh temporary profiles; screenshots and status are saved as
+  page in fresh temporary profiles, and a right-click on its composer exposed
+  the editing menu. Screenshots and status are saved as
   `artifacts/website-check-{source,packaged}.{png,json}`. A packaged anonymous
   public update check reported the current release and a fixture reached its
   download stage. These checks do not establish authenticated voice or a
