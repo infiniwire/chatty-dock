@@ -16,12 +16,15 @@ jobs:
         include:
           - runner: windows-2022
             arch: x64
+            unpacked: dist/win-unpacked/ChattyDock.exe
           - runner: macos-15-intel
             arch: x64
+            unpacked: dist/mac/ChattyDock.app/Contents/MacOS/ChattyDock
           - runner: macos-15
             arch: arm64
+            unpacked: dist/mac-arm64/ChattyDock.app/Contents/MacOS/ChattyDock
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -32,6 +35,14 @@ jobs:
         run: node -e "if(process.arch !== '${{ matrix.arch }}') process.exit(1)"
       - run: npm ci
       - run: npm run verify
+      - name: Package application for pull request testing
+        if: github.event_name == 'pull_request'
+        run: node scripts/package.mjs dir ${{ matrix.arch }}
+      - name: Test packaged application
+        if: github.event_name == 'pull_request'
+        run: npm run test:electron
+        env:
+          DOCK_EXECUTABLE: ${{ matrix.unpacked }}
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v7.0.2

@@ -8,7 +8,13 @@ delete env.ELECTRON_RUN_AS_NODE;
 delete env.DOCK_FIXTURE;
 let application;
 try {
-  application = await electron.launch({ args: ['.', '--dock-test'], env, timeout: 45000 });
+  const executablePath = process.env.DOCK_EXECUTABLE;
+  application = await electron.launch({
+    ...(executablePath ? { executablePath } : {}),
+    args: executablePath ? ['--dock-test'] : ['.', '--dock-test'],
+    env,
+    timeout: 45000,
+  });
   await application.firstWindow();
   await expect
     .poll(
@@ -34,15 +40,60 @@ try {
       { timeout: 45000 },
     )
     .toContain('https://chatgpt.com');
-  const status = await application.evaluate(async ({ BrowserWindow }) => {
+  await expect
+    .poll(
+      () =>
+        application.evaluate(async ({ BrowserWindow }) => {
+          const contents = BrowserWindow.getAllWindows()[0].contentView.children[0].webContents;
+          return contents.executeJavaScript('document.readyState');
+        }),
+      { timeout: 45000 },
+    )
+    .toBe('complete');
+  const { status, screenshot } = await application.evaluate(async ({ BrowserWindow }) => {
     const contents = BrowserWindow.getAllWindows()[0].contentView.children[0].webContents;
     const info = await contents.executeJavaScript(
-      '({ title: document.title, hasContent: document.body.innerText.length > 100, verification: /verify you are human|just a moment|checking your browser/i.test(document.body.innerText), hasLogin: /log in|sign in|sign up/i.test(document.body.innerText) })',
+      '({ title: document.title, hasContent: (document.body?.innerText.length || 0) > 100, verification: /verify you are human|just a moment|checking your browser|verify you are a human/i.test(document.body?.innerText || ""), hasLogin: /log in|sign in|sign up/i.test(document.body?.innerText || "") })',
     );
-    return { origin: new URL(contents.getURL()).origin, ...info, authenticated: false };
+    return {
+      status: { origin: new URL(contents.getURL()).origin, ...info, authenticated: false },
+      screenshot: (await contents.capturePage()).toDataURL(),
+    };
   });
+  if (!status.verification) {
+    const website = application
+      .context()
+      .pages()
+      .find((entry) => entry.url().startsWith(status.origin));
+    if (!website) throw new Error('The live ChatGPT page was not available to the test.');
+    const composer = website
+      .locator('#prompt-textarea, [contenteditable="true"], textarea')
+      .first();
+    await expect(composer).toBeVisible({ timeout: 15000 });
+    await application.evaluate(({ app, Menu }) => {
+      app.__websiteMenuBuild = Menu.buildFromTemplate;
+      Menu.buildFromTemplate = (template) => {
+        const menu = app.__websiteMenuBuild(template);
+        app.__websiteMenu = menu;
+        menu.popup = () => {};
+        return menu;
+      };
+    });
+    await composer.click({ button: 'right' });
+    const labels = await application.evaluate(({ app }) =>
+      app.__websiteMenu?.items.map((item) => item.label),
+    );
+    expect(labels).toEqual(
+      expect.arrayContaining(['Undo', 'Redo', 'Cut', 'Copy', 'Paste', 'Select All']),
+    );
+    status.contextMenuEditCommands = true;
+  }
   await fs.mkdir('artifacts', { recursive: true });
   await fs.writeFile('artifacts/website-check.json', JSON.stringify(status, null, 2));
+  await fs.writeFile(
+    'artifacts/website-check.png',
+    Buffer.from(screenshot.split(',')[1], 'base64'),
+  );
   console.log(JSON.stringify(status));
 } finally {
   if (application) await application.close();

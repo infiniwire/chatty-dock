@@ -12,6 +12,7 @@ const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dock-integration-'));
 const output = path.resolve('artifacts');
 await fs.mkdir(output, { recursive: true });
 const packaged = process.env.DOCK_EXECUTABLE;
+const isolateClipboard = process.env.DOCK_TEST_ISOLATE_CLIPBOARD === '1';
 let application;
 const results = [];
 let failureWatchdog;
@@ -47,8 +48,8 @@ delete env.ELECTRON_RUN_AS_NODE;
 async function launch() {
   application = await electron.launch({
     ...(packaged
-      ? { executablePath: packaged, args: ['--dock-test'] }
-      : { args: ['.', '--dock-test'] }),
+      ? { executablePath: packaged, args: ['--dock-test', '--use-fake-device-for-media-stream'] }
+      : { args: ['.', '--dock-test', '--use-fake-device-for-media-stream'] }),
     env,
     timeout: 45000,
   });
@@ -63,6 +64,16 @@ async function launch() {
       app.__dockExternalCalls.push(url);
     };
   });
+  if (isolateClipboard) {
+    // Do not inspect or overwrite the host user's clipboard during local runs.
+    await application.evaluate(({ app, clipboard }) => {
+      app.__testClipboardText = '';
+      clipboard.writeText = (value) => {
+        app.__testClipboardText = value;
+      };
+      clipboard.readText = () => app.__testClipboardText;
+    });
+  }
   await application.firstWindow();
   await expect
     .poll(
@@ -158,6 +169,182 @@ try {
   const winId = await application.evaluate(
     ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].id,
   );
+  await check(
+    'website context menu follows the focused content and safe browser policy',
+    async () => {
+      await application.evaluate(({ app, Menu, clipboard }) => {
+        app.__contextBuild = Menu.buildFromTemplate;
+        app.__contextClipboard = clipboard.writeText;
+        app.__contextEmoji = app.showEmojiPanel;
+        app.__contextExternalCount = app.__dockExternalCalls.length;
+        app.__contextMenuCount = 0;
+        Menu.buildFromTemplate = (template) => {
+          const menu = app.__contextBuild(template);
+          app.__contextMenu = menu;
+          app.__contextMenuCount++;
+          menu.popup = () => {};
+          return menu;
+        };
+        clipboard.writeText = (text) => {
+          app.__contextCopied = text;
+        };
+        app.showEmojiPanel = () => {
+          app.__contextEmojiOpened = true;
+        };
+      });
+      try {
+        const remotePage = await viewPage(id);
+        const openMenu = async (selector) => {
+          const before = await application.evaluate(({ app }) => app.__contextMenuCount);
+          await remotePage.locator(selector).click({ button: 'right' });
+          await expect
+            .poll(() => application.evaluate(({ app }) => app.__contextMenuCount))
+            .toBe(before + 1);
+          return application.evaluate(({ app }) =>
+            app.__contextMenu.items.map((item) => ({ label: item.label, enabled: item.enabled })),
+          );
+        };
+        const clickItem = (label) =>
+          application.evaluate(({ app }, name) => {
+            const item = app.__contextMenu.items.find((entry) => entry.label === name);
+            if (!item?.enabled) throw new Error(`Unavailable menu item: ${name}`);
+            item.click();
+          }, label);
+        const input = remotePage.locator('#input');
+        await input.fill('context selection');
+        await input.press('End');
+        await input.pressSequentially('!');
+        await openMenu('#input');
+        await clickItem('Undo');
+        await expect(input).toHaveValue('context selection');
+        await openMenu('#input');
+        await clickItem('Redo');
+        await expect(input).toHaveValue('context selection!');
+        await input.fill('context selection');
+        const editable = await openMenu('#input');
+        expect(editable.map((item) => item.label)).toEqual(
+          expect.arrayContaining(['Undo', 'Redo', 'Cut', 'Copy', 'Paste', 'Select All']),
+        );
+        await clickItem('Select All');
+        await expect
+          .poll(() => input.evaluate((element) => element.selectionEnd - element.selectionStart))
+          .toBe('context selection'.length);
+        if (
+          process.platform === 'win32' &&
+          (await application.evaluate(({ app }) => app.isEmojiPanelSupported()))
+        ) {
+          expect(editable.map((item) => item.label)).toContain('Emoji');
+          await clickItem('Emoji');
+          expect(await application.evaluate(({ app }) => app.__contextEmojiOpened)).toBe(true);
+        }
+        const link = await openMenu('#context-link');
+        expect(link.map((item) => item.label)).toEqual(
+          expect.arrayContaining(['Open Link in Browser', 'Copy Link Address']),
+        );
+        await clickItem('Open Link in Browser');
+        await expect
+          .poll(() => application.evaluate(({ app }) => app.__dockExternalCalls.at(-1)))
+          .toBe('https://example.com/context');
+        await clickItem('Copy Link Address');
+        expect(await application.evaluate(({ app }) => app.__contextCopied)).toBe(
+          'https://example.com/context',
+        );
+        const image = await openMenu('#context-image');
+        expect(image.map((item) => item.label)).toContain('Copy Image Address');
+        await clickItem('Copy Image Address');
+        expect(await application.evaluate(({ app }) => app.__contextCopied)).toBe(
+          `${fixture.origin}/context-image.svg`,
+        );
+        const blobAddress = await remotePage.locator('#context-image').evaluate((element) => {
+          const url = URL.createObjectURL(
+            new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"/>'], {
+              type: 'image/svg+xml',
+            }),
+          );
+          element.src = url;
+          return url;
+        });
+        await openMenu('#context-image');
+        await clickItem('Copy Image Address');
+        expect(await application.evaluate(({ app }) => app.__contextCopied)).toBe(blobAddress);
+        await remotePage
+          .locator('#context-link')
+          .evaluate((element) => element.setAttribute('href', 'javascript:alert(1)'));
+        const blocked = await openMenu('#context-link');
+        expect(blocked.map((item) => item.label)).not.toContain('Open Link in Browser');
+      } finally {
+        await application.evaluate(({ app, Menu, clipboard }) => {
+          Menu.buildFromTemplate = app.__contextBuild;
+          clipboard.writeText = app.__contextClipboard;
+          app.showEmojiPanel = app.__contextEmoji;
+          app.__dockExternalCalls.splice(app.__contextExternalCount);
+          delete app.__contextMenu;
+          delete app.__contextBuild;
+          delete app.__contextClipboard;
+          delete app.__contextEmoji;
+          delete app.__contextExternalCount;
+          delete app.__contextMenuCount;
+          delete app.__contextCopied;
+          delete app.__contextEmojiOpened;
+        });
+      }
+    },
+  );
+  await check('media approvals are remembered separately for microphone and camera', async () => {
+    await application.evaluate(({ app, dialog }) => {
+      app.__mediaDialog = dialog.showMessageBox;
+      app.__mediaPrompts = 0;
+      app.__mediaMessages = [];
+      dialog.showMessageBox = async (...args) => {
+        if (args[1]?.title === 'Media permission') {
+          app.__mediaPrompts++;
+          app.__mediaMessages.push(args[1].message);
+          return { response: 1, checkboxChecked: false };
+        }
+        return app.__mediaDialog(...args);
+      };
+    });
+    try {
+      const acquire = (constraints) =>
+        js(
+          id,
+          `navigator.mediaDevices.getUserMedia(${JSON.stringify(constraints)}).then(stream => { stream.getTracks().forEach(track => track.stop()); return true; })`,
+        );
+      expect(await acquire({ audio: true })).toBe(true);
+      expect(await acquire({ audio: true })).toBe(true);
+      expect(await application.evaluate(({ app }) => app.__mediaPrompts)).toBe(1);
+      expect(await acquire({ video: true })).toBe(true);
+      expect(await acquire({ audio: true, video: true })).toBe(true);
+      expect(await application.evaluate(({ app }) => app.__mediaPrompts)).toBe(2);
+      expect(await application.evaluate(({ app }) => app.__mediaMessages)).toEqual([
+        'Allow this ChatGPT page to use your microphone?',
+        'Allow this ChatGPT page to use your camera?',
+      ]);
+      const frameResult = await js(
+        id,
+        `(async () => {
+        const frame = document.createElement('iframe');
+        frame.srcdoc = '<p>Permission fixture</p>';
+        document.body.appendChild(frame);
+        await new Promise(resolve => frame.addEventListener('load', resolve, {once:true}));
+        try {
+          const stream = await frame.contentWindow.navigator.mediaDevices.getUserMedia({audio:true});
+          stream.getTracks().forEach(track => track.stop());
+          return 'allowed';
+        } catch (error) { return error.name; } finally { frame.remove(); }
+      })()`,
+      );
+      expect(frameResult).toBe('NotAllowedError');
+      expect(await application.evaluate(({ app }) => app.__mediaPrompts)).toBe(2);
+    } finally {
+      await application.evaluate(({ app, dialog }) => {
+        dialog.showMessageBox = app.__mediaDialog;
+        delete app.__mediaDialog;
+        delete app.__mediaPrompts;
+        delete app.__mediaMessages;
+      });
+    }
+  });
   await check(
     'stable window numbers appear in titles and rainbow navigation badges without counting menus',
     async () => {
@@ -656,6 +843,47 @@ try {
   );
   await js(id, 'localStorage.setItem("sentinel","personal")');
   const other = await command(page, { type: 'profile-create', name: 'Work' });
+  await check(
+    'media approval stays isolated by login profile and does not remember denials',
+    async () => {
+      await application.evaluate(({ app, dialog }) => {
+        app.__mediaDialog = dialog.showMessageBox;
+        app.__mediaPrompts = 0;
+        dialog.showMessageBox = async (...args) => {
+          if (args[1]?.title === 'Media permission') {
+            app.__mediaPrompts++;
+            return { response: app.__mediaPrompts === 1 ? 0 : 1, checkboxChecked: false };
+          }
+          return app.__mediaDialog(...args);
+        };
+      });
+      const acquire = (target) =>
+        js(
+          target,
+          `navigator.mediaDevices.getUserMedia({audio:true}).then(stream => { stream.getTracks().forEach(track => track.stop()); return 'allowed'; }, error => error.name)`,
+        );
+      try {
+        expect(await acquire(id)).toBe('allowed');
+        expect(await application.evaluate(({ app }) => app.__mediaPrompts)).toBe(0);
+        await command(page, { type: 'profile-switch', id: other.id });
+        id = await remote(winId);
+        await waitRemote(id);
+        expect(await acquire(id)).toBe('NotAllowedError');
+        expect(await acquire(id)).toBe('allowed');
+        expect(await acquire(id)).toBe('allowed');
+        expect(await application.evaluate(({ app }) => app.__mediaPrompts)).toBe(2);
+      } finally {
+        await command(page, { type: 'profile-switch', id: profileId });
+        id = await remote(winId);
+        await waitRemote(id);
+        await application.evaluate(({ app, dialog }) => {
+          dialog.showMessageBox = app.__mediaDialog;
+          delete app.__mediaDialog;
+          delete app.__mediaPrompts;
+        });
+      }
+    },
+  );
   await check(
     'native profile dropdown themes, keyboard, isolation, dismissal and IPC scope',
     async () => {
@@ -1416,7 +1644,7 @@ try {
       await waitRemote(id);
     },
   );
-  await check('file selection, file drag/drop and image clipboard paste', async () => {
+  await check('file selection and file drag/drop', async () => {
     const remotePage = await viewPage(id);
     const file = path.join(directory, 'upload.txt');
     await fs.writeFile(file, 'fixture-upload');
@@ -1431,46 +1659,56 @@ try {
     await expect
       .poll(() => js(id, 'document.querySelector("#upload-result").textContent'))
       .toBe('7');
-    await application.evaluate(async ({ clipboard, nativeImage, ClipboardItem, app }, icon) => {
-      app.__dockClipboard = await clipboard.read();
-      await clipboard.write([
-        new ClipboardItem({
-          'image/png': new Blob([nativeImage.createFromPath(icon).toPNG()], { type: 'image/png' }),
-        }),
-      ]);
-    }, path.resolve('build/icon.png'));
-    try {
-      await remotePage.locator('#drop').focus();
-      await application.evaluate(({ webContents }, id) => webContents.fromId(id).paste(), id);
-      await expect
-        .poll(async () =>
-          Number(await js(id, 'document.querySelector("#upload-result").textContent')),
-        )
-        .toBeGreaterThan(7);
-    } finally {
-      await application.evaluate(async ({ clipboard, ClipboardItem, app }) => {
-        if (app.__dockClipboard?.length) {
-          const entries = await Promise.all(
-            app.__dockClipboard
-              .filter((item) => item.types.length > 0)
-              .map(
-                async (item) =>
-                  new ClipboardItem(
-                    Object.fromEntries(
-                      await Promise.all(
-                        item.types.map(async (type) => [type, await item.getType(type)]),
+  });
+  if (isolateClipboard) {
+    const name = 'real image clipboard paste';
+    results.push({ name, passed: false, skipped: true });
+    console.log(`SKIP ${name}: local clipboard isolation is enabled.`);
+  } else
+    await check('real image clipboard paste', async () => {
+      const remotePage = await viewPage(id);
+      await application.evaluate(async ({ clipboard, nativeImage, ClipboardItem, app }, icon) => {
+        app.__dockClipboard = await clipboard.read();
+        await clipboard.write([
+          new ClipboardItem({
+            'image/png': new Blob([nativeImage.createFromPath(icon).toPNG()], {
+              type: 'image/png',
+            }),
+          }),
+        ]);
+      }, path.resolve('build/icon.png'));
+      try {
+        await remotePage.locator('#drop').focus();
+        await application.evaluate(({ webContents }, id) => webContents.fromId(id).paste(), id);
+        await expect
+          .poll(async () =>
+            Number(await js(id, 'document.querySelector("#upload-result").textContent')),
+          )
+          .toBeGreaterThan(7);
+      } finally {
+        await application.evaluate(async ({ clipboard, ClipboardItem, app }) => {
+          if (app.__dockClipboard?.length) {
+            const entries = await Promise.all(
+              app.__dockClipboard
+                .filter((item) => item.types.length > 0)
+                .map(
+                  async (item) =>
+                    new ClipboardItem(
+                      Object.fromEntries(
+                        await Promise.all(
+                          item.types.map(async (type) => [type, await item.getType(type)]),
+                        ),
                       ),
                     ),
-                  ),
-              ),
-          );
-          if (entries.length) await clipboard.write(entries);
-          else clipboard.clear();
-        } else clipboard.clear();
-        delete app.__dockClipboard;
-      });
-    }
-  });
+                ),
+            );
+            if (entries.length) await clipboard.write(entries);
+            else clipboard.clear();
+          } else clipboard.clear();
+          delete app.__dockClipboard;
+        });
+      }
+    });
   await application.evaluate(({ dialog }, directory) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [directory] });
   }, directory);
@@ -2089,6 +2327,32 @@ try {
     expect(await js(id, 'document.cookie')).toContain('dock-auth=valid');
     expect(await js(id, 'localStorage.getItem("sentinel")')).toBe('personal');
     expect((await snapshot(page)).downloads.filter((d) => d.state === 'completed')).toHaveLength(3);
+    await application.evaluate(({ app, dialog }) => {
+      app.__mediaDialog = dialog.showMessageBox;
+      app.__mediaPrompts = 0;
+      dialog.showMessageBox = async (...args) => {
+        if (args[1]?.title === 'Media permission') {
+          app.__mediaPrompts++;
+          return { response: 0, checkboxChecked: false };
+        }
+        return app.__mediaDialog(...args);
+      };
+    });
+    try {
+      expect(
+        await js(
+          id,
+          "navigator.mediaDevices.getUserMedia({audio:true}).then(stream => { stream.getTracks().forEach(track => track.stop()); return 'allowed'; }, error => error.name)",
+        ),
+      ).toBe('NotAllowedError');
+      expect(await application.evaluate(({ app }) => app.__mediaPrompts)).toBe(1);
+    } finally {
+      await application.evaluate(({ app, dialog }) => {
+        dialog.showMessageBox = app.__mediaDialog;
+        delete app.__mediaDialog;
+        delete app.__mediaPrompts;
+      });
+    }
   });
   await check(
     'unfinished downloads remain in history after an abrupt application exit',
@@ -2137,8 +2401,10 @@ try {
     path.join(output, 'performance.json'),
     JSON.stringify(performanceReport, null, 2),
   );
+  const passedCount = results.filter((result) => result.passed).length;
+  const skippedCount = results.filter((result) => result.skipped).length;
   console.log(
-    `Passed ${results.length} Electron integration checks${packaged ? ' against the packaged application' : ''}.`,
+    `Passed ${passedCount} Electron integration checks${packaged ? ' against the packaged application' : ''}${skippedCount ? `; ${skippedCount} skipped` : ''}.`,
   );
 } catch (error) {
   console.error(error);

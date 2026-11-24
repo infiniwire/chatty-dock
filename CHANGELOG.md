@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add a website context menu with editing commands, safe link and image address actions, and the native Windows emoji picker.
+- Remember approved microphone and camera permissions for the current app session, separately by login profile and website origin.
+
 ## 0.3.8
 
 - Bound individual Electron integration scenarios so an unresponsive application call fails with evidence rather than stalling the release job.
