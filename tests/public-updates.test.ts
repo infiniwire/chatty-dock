@@ -6,10 +6,18 @@ vi.mock('electron', () => ({
   app: { isPackaged: true, getPath: () => 'unused-test-profile' },
   safeStorage: { isEncryptionAvailable: () => false },
 }));
-vi.mock('node:child_process', () => ({
-  execFile: (_file: string, _args: string[], _options: unknown, callback: (error: Error) => void) =>
-    callback(new Error('GitHub CLI unavailable')),
-}));
+vi.mock('node:child_process', async () => {
+  const { promisify } = await import('node:util');
+  // Exercise the public feed on macOS as a Developer ID signed build; the
+  // production signature gate remains active and is not bypassed by tests.
+  const execFile = Object.assign(vi.fn(), {
+    [promisify.custom]: vi.fn(async () => ({
+      stdout: '',
+      stderr: 'Authority=Developer ID Application: Test',
+    })),
+  });
+  return { execFile };
+});
 vi.mock('electron-updater', async () => {
   const { EventEmitter } = await import('node:events');
   return {

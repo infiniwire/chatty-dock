@@ -487,6 +487,12 @@ fixture`, rather than the new application shell. The test now identifies
   with the verified SEC-001 Electron mitigation included. Evidence is stored in
   `artifacts/maintenance/public-update-20261124/`. The already-completed weekly
   and monthly cycles do not trigger additional releases.
+- Candidate CI [run 45485696634](https://github.com/infiniwire/chatty-dock/actions/runs/45485696634)
+  exposed a test-only failure on both macOS architectures: the new public feed
+  unit tests mocked the platform signature check as unavailable, so the existing
+  unsigned-build guard stopped the checks. The test now models a Developer ID
+  signature. The production signature guard is unchanged. Local tests passed;
+  a new cross-platform CI run must pass before a release tag is created.
 
 ## Issue and backlog register
 
