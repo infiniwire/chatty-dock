@@ -85,7 +85,7 @@ CI validates Windows, Intel macOS, and Apple Silicon macOS. A pushed `vX.Y.Z` ta
 
 Manual workflow dispatch builds packages without publishing. The default mode needs no signing secrets: Windows is unsigned; macOS uses ad-hoc signing and is not notarized. OS trust prompts may apply. Developer ID signing/notarization and Windows signing are optional explicit modes; failed requested signing never falls back silently. See [release setup](docs/releases.md).
 
-Installed clients check for newer stable releases on startup, download automatically, and install silently before restarting. File downloads finish first. Private repository credentials stay on each client. macOS automatic installation requires a Developer ID signed build; ad-hoc builds show the manual-update requirement. See [automatic updates](docs/automatic-updates.md).
+Installed clients check public stable releases on startup without a GitHub account, download automatically, and install silently before restarting. File downloads finish first. Older versions that require repository credentials must be updated manually once. macOS automatic installation requires a Developer ID signed build; ad-hoc builds show the manual-update requirement. See [automatic updates](docs/automatic-updates.md).
 
 ## License
 

@@ -1,8 +1,6 @@
-import { app, safeStorage } from 'electron';
+import { app } from 'electron';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, rename, unlink } from 'node:fs/promises';
-import path from 'node:path';
 import electronUpdater from 'electron-updater';
 import { UpdateController, type UpdateBackend } from './update-controller';
 import type { UpdateState } from '../shared/model';
@@ -15,6 +13,7 @@ export class Updates {
     message: 'Updates are checked automatically at startup.',
   };
   private initializing?: Promise<void>;
+  private feedConfigured = false;
   constructor(
     private changed: () => void,
     private canInstall: () => boolean,
@@ -22,6 +21,7 @@ export class Updates {
     private beginInstall: () => void,
     private testMode: boolean,
     private e2eFeed?: string,
+    private publicFeedTest = false,
   ) {}
   get state(): UpdateState {
     return this.controller?.state ?? this.fallback;
@@ -30,66 +30,15 @@ export class Updates {
     this.fallback = state;
     this.changed();
   }
-  private get tokenPath(): string {
-    return path.join(app.getPath('userData'), 'update-token.enc');
-  }
-  async saveToken(token: string): Promise<void> {
-    if (
-      this.state.stage === 'downloading' ||
-      this.state.stage === 'waiting' ||
-      this.state.stage === 'installing'
-    )
-      throw new Error('Wait for the current update to finish before changing credentials.');
-    if (token) {
-      if (!safeStorage.isEncryptionAvailable())
-        throw new Error(
-          'Operating system credential encryption is unavailable. Use a local GH_TOKEN environment variable instead.',
-        );
-      const encrypted = await safeStorage.encryptStringAsync(token);
-      await writeFile(`${this.tokenPath}.tmp`, encrypted, { mode: 0o600 });
-      await rename(`${this.tokenPath}.tmp`, this.tokenPath);
-    } else
-      await unlink(this.tokenPath).catch((error) => {
-        if (error.code !== 'ENOENT') throw new Error('The saved credential could not be removed.');
-      });
-    // Reuse the existing updater and its listeners; refresh only the feed credentials.
-    await this.check(true);
-  }
-  private async credentials(): Promise<
-    { token: string; source: 'saved' | 'environment' | 'github-cli' } | undefined
-  > {
-    try {
-      if (safeStorage.isEncryptionAvailable()) {
-        const encrypted = await readFile(this.tokenPath);
-        const result = await safeStorage.decryptStringAsync(encrypted);
-        if (result.result) return { token: result.result, source: 'saved' };
-      }
-    } catch {
-      /* An unavailable keychain does not prevent environment or CLI credentials. */
-    }
-    const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
-    if (token) return { token, source: 'environment' };
-    try {
-      const result = await run('gh', ['auth', 'token', '--hostname', 'github.com'], {
-        timeout: 5000,
-        maxBuffer: 8192,
-        windowsHide: true,
-      });
-      if (result.stdout.trim()) return { token: result.stdout.trim(), source: 'github-cli' };
-    } catch {
-      /* GitHub CLI is optional on client machines. */
-    }
-    return;
-  }
-  async check(refresh = false): Promise<void> {
+  async check(): Promise<void> {
     if (this.initializing) return this.initializing;
-    this.initializing = this.start(refresh).finally(() => {
+    this.initializing = this.start().finally(() => {
       this.initializing = undefined;
     });
     return this.initializing;
   }
-  private async start(refresh: boolean): Promise<void> {
-    if ((!app.isPackaged || this.testMode) && !this.e2eFeed) {
+  private async start(): Promise<void> {
+    if ((!app.isPackaged || this.testMode) && !this.e2eFeed && !this.publicFeedTest) {
       this.set({
         stage: 'development',
         message: 'Automatic installation runs in the installed application.',
@@ -128,38 +77,34 @@ export class Updates {
         this.prepareInstall,
         this.beginInstall,
       );
-    if (this.e2eFeed) {
-      const url = new URL(this.e2eFeed);
-      if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1')
-        throw new Error('Invalid updater fixture.');
-      backend.setFeedURL({ provider: 'generic', url: url.href });
-    } else if (
-      refresh ||
-      this.controller.state.stage === 'idle' ||
-      this.controller.state.stage === 'credentials' ||
-      this.controller.state.stage === 'error'
-    ) {
-      const credentials = await this.credentials();
-      if (!credentials) {
-        this.controller.set({
-          stage: 'credentials',
-          message:
-            'Private repository access is needed. Sign into GitHub CLI or save a repository-read token in Settings.',
+    // The isolated public-feed probe performs a real check but cannot download
+    // or install an update, even if a newer release appears during the test.
+    if (this.publicFeedTest) {
+      backend.autoDownload = false;
+      if (!app.isPackaged) backend.forceDevUpdateConfig = true;
+    }
+    if (!this.feedConfigured) {
+      if (this.e2eFeed) {
+        const url = new URL(this.e2eFeed);
+        if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1')
+          throw new Error('Invalid updater fixture.');
+        backend.setFeedURL({
+          provider: 'github',
+          owner: 'infiniwire',
+          repo: 'chatty-dock',
+          private: false,
+          host: url.host,
+          protocol: 'http',
         });
-        return;
+      } else {
+        backend.setFeedURL({
+          provider: 'github',
+          owner: 'infiniwire',
+          repo: 'chatty-dock',
+          private: false,
+        });
       }
-      backend.setFeedURL({
-        provider: 'github',
-        owner: 'infiniwire',
-        repo: 'chatty-dock',
-        private: true,
-        token: credentials.token,
-      });
-      this.controller.set({
-        stage: 'idle',
-        message: 'Repository access is configured.',
-        credentialSource: credentials.source,
-      });
+      this.feedConfigured = true;
     }
     await this.controller.check();
   }

@@ -32,7 +32,7 @@ git push origin v0.2.4
 
 The version tag must match `package.json`. Tags such as `v0.2.4-beta.1` produce prereleases; stable tags produce stable releases. Tags are created by the maintainer, never automatically on every commit.
 
-Manual `workflow_dispatch` builds and collects artifacts without publishing, even if dispatched against a tag. Use it to verify packaging before tagging a public release. Artifacts remain subject to repository access and retention. The repository can remain private throughout.
+Manual `workflow_dispatch` builds and collects artifacts without publishing, even if dispatched against a tag. Use it to verify packaging before tagging a public release. Artifacts remain subject to repository access and retention. Public anonymous updates require the repository and published release assets to be public.
 
 ## Signed builds
 

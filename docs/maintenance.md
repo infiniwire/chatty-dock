@@ -18,10 +18,11 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 - Release workflow configuration at commit `2f7afe1` has a separate
   `update-install` job parallel to the three platform builds, and ordinary CI
   does not run the update installation test.
-- Changes awaiting release: SEC-001 updates Electron to mitigate a vendor
-  security advisory. The fix passed local dependency and application regression
-  checks and three-platform CI. The startup test correction is included
-  in `v0.3.5`; the reported intermittent black screen still needs confirmation.
+- Changes awaiting release: UPD-004 enables anonymous public update checks,
+  and SEC-001 updates Electron to mitigate a vendor security advisory. The
+  `0.3.6` emergency release candidate is being verified; no cycle is complete
+  until all publication and post-publication checks pass. The reported
+  intermittent black screen still needs confirmation.
 - Latest stable release: [v0.3.5](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.5),
   commit `2b1a06bedd2ffd64b4d6a5bf6e20b8c4944fc7a3`. Downloaded packages and
   manifests passed checksum verification. Repository visibility is public.
@@ -467,6 +468,26 @@ fixture`, rather than the new application shell. The test now identifies
   06:00. The previously recorded Node/ICU timezone-data discrepancy persists;
   it was not used to determine this run's local date or release cycle.
 
+## 2026-11-24 — public update access correction
+
+- UPD-004, severity 9/10: the installed updater requires GitHub credentials
+  even though the release repository is public. Automatic updates are broadly
+  unavailable to users without such credentials, although manual installation
+  is possible. The user's screenshot shows the access-required message.
+- The root cause is the authenticated private provider configured in both the
+  application and the package. The correction uses the public GitHub provider,
+  does not read GitHub credentials, and removes the obsolete credential UI.
+  Old clients need one manual installation before anonymous updates can work.
+- Two regression cases failed against the prior updater, both without a token
+  and with an unrelated environment token; they passed after the change. A
+  real unauthenticated public release check and a controlled GitHub-compatible
+  provider check passed locally. The full validation and release workflow,
+  including isolated real installation and relaunch, remain publication gates.
+- A `0.3.6` daily emergency release is being prepared for the 9/10 correction,
+  with the verified SEC-001 Electron mitigation included. Evidence is stored in
+  `artifacts/maintenance/public-update-20261124/`. The already-completed weekly
+  and monthly cycles do not trigger additional releases.
+
 ## Issue and backlog register
 
 | ID        | Score        | Status                                      | Fix commit            | Verification                                                               |
@@ -475,6 +496,7 @@ fixture`, rather than the new application shell. The test now identifies
 | AUTH-001  | Not rescored | Previously documented; real sign-in pending | See `known-issues.md` | Fresh manual provider login not verified                                   |
 | TEST-001  | 0/10         | Test harness correction released in v0.3.5  | `4a9c2d7`, `2b1a06b`  | Prior CI failure; source, packaged and three-platform CI checks passed     |
 | SEC-001   | 8/10         | Validated; unreleased                       | `82f8a67`             | Advisory removed from audit; app, packaged and three-platform CI passed    |
+| UPD-004   | 9/10         | Correction; release validation in progress  | Pending               | Anonymous feed regressions and local real-provider check pass              |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after

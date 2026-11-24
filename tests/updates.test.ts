@@ -102,14 +102,6 @@ describe('automatic update lifecycle', () => {
       expect(beginInstall).toHaveBeenCalledOnce();
     },
   );
-  it('clears stale access status when credentials are removed without a fallback', () => {
-    const { backend, controller } = setup();
-    controller.set({ stage: 'idle', message: 'Configured.', credentialSource: 'saved' });
-    backend.emit('checking-for-update');
-    expect(controller.state.credentialSource).toBe('saved');
-    controller.set({ stage: 'credentials', message: 'Repository access is needed.' });
-    expect(controller.state.credentialSource).toBeUndefined();
-  });
   it('keeps bounded plain-text release notes and check time through download and waiting', () => {
     const { backend, controller, canInstall } = setup();
     canInstall.mockReturnValue(false);

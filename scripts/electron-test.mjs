@@ -1784,7 +1784,7 @@ try {
     },
   );
   await check(
-    'settings categories save theme, zoom, download behavior and folders without exposing update tokens',
+    'settings categories save theme, zoom, and download preferences without requiring update credentials',
     async () => {
       const original = (await snapshot(page)).settings;
       const bounds = await application.evaluate(
@@ -1860,15 +1860,11 @@ try {
         .toBe(original.downloadDirectory);
       await page.screenshot({ path: path.join(output, 'ui-round2', 'settings-downloads.png') });
       await categories.getByRole('button', { name: 'Updates', exact: true }).click();
-      const token = page.getByLabel('GitHub update token', { exact: true });
-      await expect(token).toBeHidden();
-      await page.getByText('Private repository access', { exact: true }).click();
-      await token.fill('SYNTHETIC_NOT_A_CREDENTIAL');
-      await categories.getByRole('button', { name: 'Appearance', exact: true }).click();
-      await categories.getByRole('button', { name: 'Updates', exact: true }).click();
-      await page.getByText('Private repository access', { exact: true }).click();
-      await expect(token).toHaveValue('');
-      expect(JSON.stringify(await snapshot(page))).not.toContain('SYNTHETIC_NOT_A_CREDENTIAL');
+      await expect(page.getByText('Private repository access', { exact: true })).toHaveCount(0);
+      await expect(page.getByLabel('GitHub update token', { exact: true })).toHaveCount(0);
+      await expect(
+        page.getByText('No GitHub account is needed to receive public updates.'),
+      ).toBeVisible();
       await page.screenshot({ path: path.join(output, 'ui-round2', 'settings-updates.png') });
       await application.evaluate(
         ({ BrowserWindow }, id) => BrowserWindow.fromId(id).setSize(740, 650),
@@ -2036,39 +2032,6 @@ try {
     await command(page, { type: 'settings', theme: 'system' });
     await command(page, { type: 'panel', panel: 'none' });
   });
-  if (process.platform === 'win32')
-    await check(
-      'update credentials are OS-encrypted and excluded from renderer snapshots',
-      async () => {
-        const token = 'github_pat_SYNTHETIC_DO_NOT_USE';
-        await page.getByRole('button', { name: 'Settings', exact: true }).click();
-        await page
-          .getByRole('navigation', { name: 'Settings categories', exact: true })
-          .getByRole('button', { name: 'Updates', exact: true })
-          .click();
-        await page.getByText('Private repository access', { exact: true }).click();
-        await page.getByLabel('GitHub update token', { exact: true }).fill(token);
-        await page.getByRole('button', { name: 'Save token', exact: true }).click();
-        await expect(
-          page.getByRole('status').filter({ hasText: 'Update access saved.' }),
-        ).toBeVisible();
-        const encrypted = await fs.readFile(path.join(directory, 'update-token.enc'));
-        expect(encrypted.includes(Buffer.from(token))).toBe(false);
-        const decrypted = await application.evaluate(
-          async ({ safeStorage }, value) =>
-            (await safeStorage.decryptStringAsync(Buffer.from(value, 'base64'))).result,
-          encrypted.toString('base64'),
-        );
-        expect(decrypted).toBe(token);
-        expect(JSON.stringify(await snapshot(page))).not.toContain(token);
-        await page.getByRole('button', { name: 'Remove saved token', exact: true }).click();
-        await expect(
-          page.getByRole('status').filter({ hasText: 'Saved token removed.' }),
-        ).toBeVisible();
-        await expect(fs.access(path.join(directory, 'update-token.enc'))).rejects.toThrow();
-        await page.keyboard.press('Escape');
-      },
-    );
   await check('settings and session survive a full restart', async () => {
     await application.close();
     application = undefined;

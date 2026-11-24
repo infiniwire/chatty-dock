@@ -982,9 +982,6 @@ async function execute(
           : 'https://github.com/infiniwire/chatty-dock',
       );
       break;
-    case 'update-token':
-      await updates.saveToken(command.token);
-      break;
   }
   changed();
 }
@@ -1175,7 +1172,16 @@ if (locked)
         testMode || signInDiagnosticMode,
         updateE2e && process.argv.includes('--dock-update-test')
           ? process.env.DOCK_UPDATE_E2E_FEED
-          : undefined,
+          : testMode &&
+              process.env.DOCK_TEST_DATA &&
+              process.argv.includes('--dock-public-update-test')
+            ? process.env.DOCK_PUBLIC_UPDATE_FIXTURE
+            : undefined,
+        Boolean(
+          testMode &&
+          process.env.DOCK_TEST_DATA &&
+          process.argv.includes('--dock-public-update-test'),
+        ),
       );
       ipcMain.handle('dock:command', async (event, raw: unknown) => {
         const entry = localSender(event);

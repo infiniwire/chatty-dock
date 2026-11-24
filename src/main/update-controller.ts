@@ -89,7 +89,7 @@ export class UpdateController {
     backend.autoRunAppAfterInstall = true;
     backend.allowPrerelease = false;
     backend.allowDowngrade = false;
-    // Full downloads are reliable with authenticated private GitHub asset redirects.
+    // Use complete, verified downloads across GitHub asset redirects.
     backend.disableDifferentialDownload = true;
     backend.disableWebInstaller = true;
     backend.logger = null;
@@ -136,10 +136,6 @@ export class UpdateController {
   set(state: UpdateState): void {
     this.state = {
       ...state,
-      credentialSource:
-        state.stage === 'credentials'
-          ? undefined
-          : (state.credentialSource ?? this.state.credentialSource),
       checkedAt: state.checkedAt ?? this.state.checkedAt,
     };
     this.changed();
@@ -152,7 +148,7 @@ export class UpdateController {
     this.set({
       stage: 'error',
       message:
-        'Update failed. Check your connection and repository access, then retry. The current installation has been kept.',
+        'Update failed. Check your connection and try again. The current installation has been kept.',
     });
   }
   async check(): Promise<void> {

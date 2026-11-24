@@ -3,11 +3,9 @@ import {
   Activity,
   ArrowUpRight,
   Check,
-  ChevronDown,
   Download,
   FolderOpen,
   Info,
-  KeyRound,
   Minus,
   Monitor,
   Moon,
@@ -42,8 +40,6 @@ export function SettingsPanel({
 }): React.JSX.Element {
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [busy, setBusy] = useState(false);
-  const [token, setToken] = useState('');
-  const [message, setMessage] = useState('');
   const [pendingAskDownload, setPendingAskDownload] = useState<boolean>();
   const [zoomPercent, setZoomPercent] = useState(Math.round(state.settings.zoom * 100));
   const requestedZoom = useRef<number | undefined>(undefined);
@@ -63,7 +59,6 @@ export function SettingsPanel({
     if (busyRef.current) return { ok: false, error: 'An action is already in progress.' };
     busyRef.current = true;
     setBusy(true);
-    setMessage('');
     try {
       return await run(command);
     } finally {
@@ -85,8 +80,6 @@ export function SettingsPanel({
             aria-controls="settings-content"
             onClick={() => {
               setSection(item.id);
-              setMessage('');
-              setToken('');
             }}
           >
             <item.icon aria-hidden="true" />
@@ -281,70 +274,7 @@ export function SettingsPanel({
               New releases download at startup and install with a restart. Active file downloads
               finish first. Save unsent messages before restarting.
             </p>
-            <details className="settings-disclosure">
-              <summary>
-                <KeyRound aria-hidden="true" /> Private repository access{' '}
-                <ChevronDown className="disclosure-chevron" aria-hidden="true" />
-              </summary>
-              <div className="disclosure-content">
-                <p>
-                  Access: <strong>{state.update.credentialSource ?? 'not configured'}</strong>. Your
-                  GitHub CLI login or local GH_TOKEN can provide access automatically.
-                </p>
-                <p className="field-help">
-                  Alternatively, save a fine-grained token with read-only Contents access to this
-                  repository. It is encrypted by your operating system.
-                </p>
-                <form
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    if (busyRef.current) return;
-                    const response = await perform({ type: 'update-token', token });
-                    if (response.ok) {
-                      setToken('');
-                      setMessage('Update access saved.');
-                    }
-                  }}
-                >
-                  <label className="sr-only" htmlFor="update-token">
-                    GitHub update token
-                  </label>
-                  <input
-                    id="update-token"
-                    aria-label="GitHub update token"
-                    type="password"
-                    autoComplete="off"
-                    placeholder="Repository-read token"
-                    maxLength={512}
-                    required
-                    disabled={busy}
-                    value={token}
-                    onChange={(event) => setToken(event.target.value)}
-                  />
-                  <button disabled={busy || !token.trim()}>Save token</button>
-                </form>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={async () => {
-                    if ((await perform({ type: 'update-token', token: '' })).ok) {
-                      setToken('');
-                      setMessage('Saved token removed.');
-                    }
-                  }}
-                >
-                  Remove saved token
-                </button>
-                <div className="saved-feedback" role="status">
-                  {message && (
-                    <>
-                      <Check aria-hidden="true" />
-                      {message}
-                    </>
-                  )}
-                </div>
-              </div>
-            </details>
+            <p className="field-help">No GitHub account is needed to receive public updates.</p>
             {state.platform === 'darwin' && (
               <p className="field-help">
                 Automatic installation on Mac requires a Developer ID signed build.

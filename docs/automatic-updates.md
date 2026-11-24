@@ -18,15 +18,9 @@ Git commits alone are not updates: maintainers must publish a newer semantic-ver
 
 ## Repository access
 
-The updater uses an authenticated GitHub feed even when the repository is public. Each client needs a GitHub credential with access to the repository. Credentials are resolved in this order:
+Updates use the public `infiniwire/chatty-dock` GitHub Releases feed. A GitHub account, GitHub CLI, or access token is not required. Existing environment tokens and previously saved update credentials are not read or sent by the updater. The repository and release assets must remain publicly accessible for anonymous checks to work.
 
-1. An OS-encrypted token saved from Settings.
-2. The local `GH_TOKEN` or `GITHUB_TOKEN` environment variable.
-3. The local GitHub CLI login, through `gh auth token --hostname github.com`.
-
-For a saved token, use a fine-grained GitHub token with read-only Contents access to `infiniwire/chatty-dock`. The app never displays the saved token again. Removing it falls back to the environment or CLI. Missing/expired access is shown in Settings and does not prevent chatting.
-
-The token file is `update-token.enc` under Electron's userData folder. Encryption uses Electron safeStorage and the operating system's credential protection. Plaintext tokens are not stored in settings, logs, repository files, update manifests, or installers. No shared maintainer token is embedded in distributed clients. OS encryption must be available to save a token.
+Older versions require a GitHub credential even for this public repository. To receive this change, download and install the new release manually once. Existing profiles and app data are retained by the installer; the old encrypted `update-token.enc` file is left untouched and is no longer used.
 
 ## Platform requirements
 
@@ -42,12 +36,12 @@ Each release contains the five existing installers/archives plus:
 - `latest-mac.yml`: merged metadata for Intel and Apple Silicon ZIP/DMG files.
 - `SHA256SUMS.txt`: checksums for the five packages and both metadata files.
 
-The collector generates one merged Mac metadata document from the actual files; one architecture cannot overwrite the other's manifest. Metadata uses the SDK-compatible YAML format (JSON is valid YAML). Full authenticated downloads are used so private GitHub differential-download redirects do not cause inconsistent updates.
+The collector generates one merged Mac metadata document from the actual files; one architecture cannot overwrite the other's manifest. Metadata uses the SDK-compatible YAML format (JSON is valid YAML). Full downloads and SHA-512 validation are retained across public GitHub redirects.
 
 ## Validation
 
 Unit tests cover lifecycle ordering, overlapping checks, waiting for transfers, silent/relaunch arguments, failure handling, redaction, digest metadata and architecture merging.
 
-`npm run test:update-install` runs only on isolated Windows CI. The release workflow runs it once in a dedicated job, in parallel with the platform builds; ordinary main/PR CI does not repeat it. Publication requires both the build matrix and this installation job to succeed. The installation job builds the application before invoking the script, which builds two dedicated test-product NSIS installers, installs the older version into a test directory, starts it against a local HTTP update feed, and waits for the updater to download, silently install and relaunch the higher version. The app's startup version and persistent profile ID are then verified. Test products use their own name, app ID, install directory and user data; production installations are not used. The script does not merely mock `quitAndInstall`.
+`npm run test:public-update` checks the real public release feed from an isolated Electron profile with no GitHub credentials, with downloading and installation disabled for the probe. `npm run test:update-install` runs only on isolated Windows CI. The release workflow runs both in a dedicated job, in parallel with the platform builds; ordinary main/PR CI does not repeat the installation test. Publication requires both the build matrix and this installation job to succeed. The installation test builds two dedicated test-product NSIS installers, installs the older version into a test directory, and serves a GitHub-compatible release feed locally. The real public GitHub provider downloads and validates the newer installer without authorization, then installs and relaunches it. The app's startup version and persistent profile ID are verified. Test products use their own name, app ID, install directory and user data; production installations are not used.
 
 This Windows installation test does not establish signed macOS installation behavior. The Mac credential requirement must be satisfied and verified separately.

@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.6
 
+- Check and download updates from public GitHub Releases without GitHub sign-in or an access token. Older clients require a one-time manual installation to obtain this change.
 - Update Electron to block compromised eMudhra intermediates in Chromium and Node.js networking.
 
 ## 0.3.5

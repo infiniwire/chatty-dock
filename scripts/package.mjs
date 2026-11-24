@@ -60,7 +60,7 @@ const config = {
   asar: true,
   artifactName: 'ChattyDock-${version}-${os}-${arch}.${ext}',
   forceCodeSigning: signed,
-  publish: { provider: 'github', owner: 'infiniwire', repo: 'chatty-dock', private: true },
+  publish: { provider: 'github', owner: 'infiniwire', repo: 'chatty-dock', private: false },
   electronUpdaterCompatibility: '>=6.8.9',
   win: {
     icon: 'build/icon.ico',

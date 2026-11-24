@@ -1,5 +1,23 @@
 # Known issues
 
+## UPD-004: public release checks require GitHub credentials
+
+- Severity: 9/10. Automatic upgrades are unavailable to public users without a
+  GitHub credential; manually downloading an installer remains possible.
+- Reproduction: start an installed 0.3.5 client with no saved token, GitHub
+  environment token or GitHub CLI login, then check for updates. The public
+  repository is accessible anonymously, but the client displays a private
+  repository access requirement and does not check the release feed.
+- Root cause: both the runtime updater and package configuration selected an
+  authenticated private GitHub provider. The fix selects the public provider,
+  never reads update credentials, and removes the obsolete token controls.
+- Verification: the public-feed regression failed before the change without
+  credentials and with an unrelated environment token, then passed afterward.
+  A real, unauthenticated GitHub release check and Windows packaged checks are
+  recorded in the maintenance log. Installation from the GitHub-compatible
+  test feed is a required release CI gate. Existing clients need one manual
+  installation before they can use anonymous updates.
+
 ## SEC-001: Electron trusts compromised eMudhra intermediate certificates
 
 - Severity: 8/10. Electron's advisory describes a possible server impersonation

@@ -120,7 +120,6 @@ export const commandSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('updates') }),
   z.object({ type: z.literal('project-page'), page: z.enum(['releases', 'repository']) }),
-  z.object({ type: z.literal('update-token'), token: z.string().trim().max(512) }),
 ]);
 export type Command = z.infer<typeof commandSchema>;
 export type DownloadRecord = {
@@ -146,7 +145,6 @@ export type UpdateState = {
     | 'waiting'
     | 'installing'
     | 'error'
-    | 'credentials'
     | 'unsupported'
     | 'development';
   message: string;
@@ -155,7 +153,6 @@ export type UpdateState = {
   releaseDate?: string;
   releaseNotes?: string;
   percent?: number;
-  credentialSource?: 'saved' | 'environment' | 'github-cli';
 };
 export type Snapshot = {
   settings: Settings;

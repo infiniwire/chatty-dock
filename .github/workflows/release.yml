@@ -111,6 +111,10 @@ jobs:
         run: node -e "if(process.arch !== 'x64') process.exit(1)"
       - run: npm ci
       - run: npm run build
+      - name: Verify anonymous public release checks
+        run: npm run test:public-update
+      - name: Verify public provider against controlled release feed
+        run: npm run test:public-update -- --fixture
       - name: Verify silent update installation and automatic relaunch
         run: npm run test:update-install
       - name: Upload update installation evidence
@@ -118,7 +122,10 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: release-evidence-update-install-win-x64
-          path: artifacts/update-install/result.json
+          path: |
+            artifacts/update-install/result.json
+            artifacts/public-update-check.json
+            artifacts/public-update-fixture-check.json
           retention-days: 14
   collect:
     needs: [validate, build, update-install]
@@ -163,7 +170,7 @@ jobs:
           else
             printf '\nWindows packages are unsigned. Per-user silent updates are supported; OS trust policies still apply.\n' >> notes.md
           fi
-          printf '\nStartup automatic updates are included. Private repository access requires a local GitHub CLI login, GH_TOKEN, or an OS-encrypted read token.\n' >> notes.md
+          printf '\nStartup automatic updates use public GitHub Releases and do not require a GitHub account. Older versions require one manual install to receive this change.\n' >> notes.md
           printf '\nIndependent ChatGPT desktop wrapper. See README for login compatibility and manual verification limits.\n' >> notes.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" --draft=true

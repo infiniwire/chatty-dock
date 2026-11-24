@@ -4,7 +4,6 @@ import {
   CircleCheck,
   Download,
   Info,
-  KeyRound,
   LoaderCircle,
   RefreshCw,
   TriangleAlert,
@@ -20,7 +19,6 @@ const labels: Record<UpdateState['stage'], string> = {
   waiting: 'Ready to restart',
   installing: 'Installing update',
   error: 'Update needs attention',
-  credentials: 'Repository access needed',
   unsupported: 'Manual update required',
   development: 'Development build',
 };
@@ -46,13 +44,11 @@ export function AboutPanel({
       ? CircleCheck
       : state.update.stage === 'error'
         ? TriangleAlert
-        : state.update.stage === 'credentials'
-          ? KeyRound
-          : state.update.stage === 'downloading'
-            ? Download
-            : busy
-              ? LoaderCircle
-              : Info;
+        : state.update.stage === 'downloading'
+          ? Download
+          : busy
+            ? LoaderCircle
+            : Info;
   const platform =
     state.platform === 'darwin' ? 'macOS' : state.platform === 'win32' ? 'Windows' : state.platform;
   return (

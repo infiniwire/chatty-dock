@@ -1,9 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import http from 'node:http';
-import { createHash } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { startGitHubUpdateFixture } from './github-update-fixture.mjs';
 
 if (process.platform !== 'win32' || process.env.CI !== 'true')
   throw new Error('The real installation test must run in an isolated Windows CI runner.');
@@ -51,48 +50,15 @@ const baselineInstaller = path.join(root, baseline, `ChattyDock-${baseline}-win-
 const targetInstaller = path.join(root, target, `ChattyDock-${target}-win-x64.exe`);
 const payload = await fs.readFile(targetInstaller);
 const filename = path.basename(targetInstaller);
-const updateInfo = JSON.stringify({
-  version: target,
-  files: [
-    {
-      url: filename,
-      sha512: createHash('sha512').update(payload).digest('base64'),
-      size: payload.length,
-    },
-  ],
-  path: filename,
-  sha512: createHash('sha512').update(payload).digest('base64'),
-  releaseDate: new Date().toISOString(),
-});
-let metadataRequests = 0,
-  payloadRequests = 0;
-const server = http.createServer((request, response) => {
-  const name = new URL(request.url, 'http://localhost').pathname;
-  if (name === '/latest.yml') {
-    metadataRequests++;
-    response.writeHead(200, { 'Content-Type': 'application/yaml' });
-    response.end(updateInfo);
-  } else if (name === `/${filename}`) {
-    payloadRequests++;
-    response.writeHead(200, {
-      'Content-Type': 'application/octet-stream',
-      'Content-Length': payload.length,
-    });
-    response.end(payload);
-  } else {
-    response.writeHead(404);
-    response.end();
-  }
-});
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const origin = `http://127.0.0.1:${server.address().port}`;
+const server = await startGitHubUpdateFixture(target, filename, payload);
+const { origin, requests } = server;
 let started;
 try {
   await execute(baselineInstaller, ['/S', `/D=${installDir}`]);
   await fs.access(executable);
   // Separate product name/app ID keep this test away from production installations.
   started = spawn(executable, ['--dock-update-test'], {
-    env: { ...process.env, DOCK_UPDATE_E2E_FEED: origin },
+    env: { ...process.env, DOCK_UPDATE_E2E_FEED: origin, GH_TOKEN: '', GITHUB_TOKEN: '' },
     windowsHide: true,
     stdio: 'ignore',
   });
@@ -107,16 +73,18 @@ try {
     'download, silent installation, and automatic relaunch',
   );
   const updated = JSON.parse(await fs.readFile(settingsFile, 'utf8'));
-  if (!metadataRequests || !payloadRequests)
+  if (!requests.metadata || !requests.payload)
     throw new Error('The real updater did not request metadata and the installer.');
+  if (requests.authenticated) throw new Error('The public update feed sent authorization headers.');
   if (updated.defaultProfileId !== original.defaultProfileId)
     throw new Error('Profile identity was lost during upgrade.');
   const result = {
     passed: true,
     baseline,
     target,
-    metadataRequests,
-    payloadRequests,
+    metadataRequests: requests.metadata,
+    payloadRequests: requests.payload,
+    authenticatedRequests: requests.authenticated,
     installedPath: executable,
     persistedProfile: true,
     restartedVersion: updated.lastAppVersion,
@@ -128,18 +96,11 @@ try {
 } catch (error) {
   await fs.writeFile(
     path.join(root, 'result.json'),
-    JSON.stringify(
-      { passed: false, baseline, target, metadataRequests, payloadRequests, error: error.message },
-      null,
-      2,
-    ),
+    JSON.stringify({ passed: false, baseline, target, requests, error: error.message }, null, 2),
   );
   throw error;
 } finally {
-  await new Promise((resolve) => {
-    server.closeAllConnections();
-    server.close(resolve);
-  });
+  await server.close();
   // Scope cleanup to the dedicated test product; never stop a production process.
   const escaped = executable.replace(/'/g, "''");
   await run(
