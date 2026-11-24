@@ -142,15 +142,15 @@ async function sample(label) {
     }),
   );
 }
-async function check(name, work) {
-  await work();
+async function check(name, work, timeoutMs = 90000) {
+  await bounded(work, timeoutMs, `Integration check ${name}`);
   results.push({ name, passed: true });
   console.log(`PASS ${name}`);
 }
 try {
   let page = await launch();
   if (process.env.DOCK_TEST_FAILURE_CLEANUP === '1')
-    throw new Error('Injected integration failure for cleanup verification');
+    await check('injected stalled integration check', () => new Promise(() => {}), 500);
   let id = await remote();
   await waitRemote(id);
   const initial = await snapshot(page);

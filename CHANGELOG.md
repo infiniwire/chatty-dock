@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8
+
+- Bound individual Electron integration scenarios so an unresponsive application call fails with evidence rather than stalling the release job.
+
 ## 0.3.7
 
 - Bound failure diagnostics and cleanup in Electron integration tests so a failed test cannot hold a release job until its overall timeout.

@@ -6,7 +6,7 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 ## Current state
 
 - Repository: `infiniwire/chatty-dock`; working checkout: `D:\Github\chatty-dock`.
-- Release status: **v0.3.6 published**. On 2026-11-22, the user authorized normal
+- Release status: **v0.3.7 published**. On 2026-11-22, the user authorized normal
   pushes and releases whether the repository is public or private. Do not
   change repository visibility from this maintenance task.
 - Version policy: three-part `A.B.C`. A daily emergency or weekly maintenance
@@ -21,8 +21,8 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 - UPD-004 and the SEC-001 mitigation were released in v0.3.6. The reported
   intermittent black screen still needs confirmation. TEST-002, an intermittent
   Apple Silicon integration timeout and cleanup hang, remains under investigation.
-- Latest stable release: [v0.3.6](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.6),
-  commit `cc915f79ef0de7e77a3486f6b9bcdef5e394f3de`. Downloaded packages and
+- Latest stable release: [v0.3.7](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.7),
+  commit `5a21c3b5affb22b9b1f41d45a0ed5b7d526b065d`. Downloaded packages and
   manifests passed checksum verification. Repository visibility is public.
 - Completed periods: November 2026 monthly and the November 16–22 and
   November 23–29 weekly cycles. No release job is in progress or failed.
@@ -531,8 +531,30 @@ fixture`, rather than the new application shell. The test now identifies
   Format, lint, TypeScript, 62 unit tests and 31 Electron integration checks
   passed locally. Package and cross-platform release validation remain required.
 - The user explicitly requested immediate deployment after tests, superseding the
-  normal once-per-day release limit for this manual follow-up. Version 0.3.7 is
-  being prepared; do not mark it published before all release checks complete.
+  normal once-per-day release limit for this manual follow-up.
+- Candidate CI [run 45495825287](https://github.com/infiniwire/chatty-dock/actions/runs/45495825287)
+  passed on all three architectures at `5a21c3b5affb22b9b1f41d45a0ed5b7d526b065d`.
+  The `v0.3.7` tag points to that commit. [Release run 45496853009](https://github.com/infiniwire/chatty-dock/actions/runs/45496853009)
+  completed successfully after retrying the Apple Silicon job. The first attempt
+  stalled inside a packaged integration scenario immediately after the second
+  launch check; no assertion failure was reported before the job timeout.
+  Windows and Intel Mac builds and the Windows update installation test passed.
+- Stable [v0.3.7](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.7)
+  points to the expected commit and is Latest. Its five downloaded packages and
+  two manifests passed SHA-256 checks; manifest versions and SHA-512 entries
+  also matched. Evidence is in `artifacts/maintenance/public-update-20261124/release-v0.3.7-verification.json`.
+  The first attempt exposed a different hang before failure handling began, so
+  the same requested fix now adds a 90-second bound around each integration
+  scenario. An injected never-returning scenario failed and exited with evidence
+  after the change; full local source regression passed, as did the targeted
+  packaged regression against the previously built 0.3.7 application. The
+  original reason for the intermittent Electron call remains unconfirmed.
+  Version 0.3.8 is being prepared to deploy this follow-up after its checks.
+- The freshly built 0.3.8 Windows executable could not be launched locally:
+  Windows Device Guard explicitly blocked it. Three attempts failed before the
+  application began; this is a local environment restriction (0/10), not a
+  confirmed product defect. Do not disable or bypass the policy. The existing
+  release workflow must run the packaged Windows tests on its isolated runner.
 
 ## Issue and backlog register
 

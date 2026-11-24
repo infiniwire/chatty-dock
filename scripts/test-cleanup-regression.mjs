@@ -39,7 +39,7 @@ try {
   throw error;
 }
 assert.notEqual(result.code, 0, output);
-assert.match(output, /Injected integration failure for cleanup verification/);
+assert.match(output, /Integration check injected stalled integration check timed out/);
 const context = JSON.parse(
   await readFile(
     process.env.DOCK_EXECUTABLE
