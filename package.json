@@ -1,6 +1,6 @@
 {
   "name": "chatty-dock",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "An independent multi-window ChatGPT desktop workspace",
   "main": "out/main/index.js",
   "author": "infiniwire",
@@ -15,7 +15,7 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:electron": "npm run test:startup && node scripts/electron-test.mjs",
+    "test:electron": "npm run test:startup && node scripts/test-cleanup-regression.mjs && node scripts/electron-test.mjs",
     "test:startup": "node scripts/startup-recovery-test.mjs",
     "test:public-update": "node scripts/public-update-check.mjs",
     "test:dev": "node scripts/dev-check.mjs",

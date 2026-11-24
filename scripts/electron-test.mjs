@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { startFixture } from './fixture.mjs';
+import { bounded, closeTestApplication } from './electron-test-cleanup.mjs';
 
 const fixture = await startFixture();
 const externalFixture = await startFixture();
@@ -13,6 +14,19 @@ await fs.mkdir(output, { recursive: true });
 const packaged = process.env.DOCK_EXECUTABLE;
 let application;
 const results = [];
+let failureWatchdog;
+function armFailureWatchdog() {
+  const timer = setTimeout(() => {
+    console.error('Electron test cleanup timed out; terminating the isolated test process.');
+    try {
+      application?.process().kill();
+    } finally {
+      process.exit(1);
+    }
+  }, 20000);
+  timer.unref();
+  return timer;
+}
 const performanceReport = {
   environment: {
     platform: process.platform,
@@ -135,6 +149,8 @@ async function check(name, work) {
 }
 try {
   let page = await launch();
+  if (process.env.DOCK_TEST_FAILURE_CLEANUP === '1')
+    throw new Error('Injected integration failure for cleanup verification');
   let id = await remote();
   await waitRemote(id);
   const initial = await snapshot(page);
@@ -1598,12 +1614,41 @@ try {
     await finished;
   });
   await check('closing windows releases their remote WebContents', async () => {
-    await application.evaluate(({ BrowserWindow }, keep) => {
-      for (const win of BrowserWindow.getAllWindows()) if (win.id !== keep) win.close();
+    const closed = await application.evaluate(({ BrowserWindow }, keep) => {
+      const ids = [];
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.id === keep) continue;
+        ids.push({
+          windowId: win.id,
+          shellId: win.webContents.id,
+          viewId: win.contentView.children[0]?.webContents?.id,
+        });
+        win.close();
+      }
+      return ids;
     }, winId);
-    await expect
-      .poll(() => application.evaluate(({ webContents }) => webContents.getAllWebContents().length))
-      .toBe(2);
+    try {
+      await expect
+        .poll(
+          () => application.evaluate(({ webContents }) => webContents.getAllWebContents().length),
+          { timeout: 15000 },
+        )
+        .toBe(2);
+    } catch (error) {
+      const remaining = await bounded(
+        () =>
+          application.evaluate(({ BrowserWindow, webContents }) => ({
+            windows: BrowserWindow.getAllWindows().map((win) => win.id),
+            contents: webContents
+              .getAllWebContents()
+              .map((contents) => ({ id: contents.id, type: contents.getType() })),
+          })),
+        5000,
+        'Window cleanup diagnostics',
+      ).catch(() => ({ unavailable: true }));
+      console.error('Window cleanup evidence:', JSON.stringify({ closed, remaining }));
+      throw error;
+    }
     await application.evaluate(
       ({ webContents }, { id, origin }) => webContents.fromId(id).loadURL(`${origin}/long`),
       { id, origin: fixture.origin },
@@ -2097,20 +2142,26 @@ try {
   );
 } catch (error) {
   console.error(error);
+  failureWatchdog = armFailureWatchdog();
   if (application) {
     const localPages = [];
     for (const page of application.context().pages()) {
       if (!page.url().startsWith('dock://ui/')) continue;
       localPages.push(
-        await page
-          .evaluate(() => ({
-            url: location.href,
-            title: document.querySelector('#panel-title')?.textContent,
-            buttons: [...document.querySelectorAll('button')].map(
-              (button) => button.getAttribute('aria-label') ?? button.textContent,
-            ),
-          }))
-          .catch(() => ({ unavailable: true })),
+        await bounded(
+          () =>
+            process.env.DOCK_TEST_FAILURE_CLEANUP === '1'
+              ? new Promise(() => {})
+              : page.evaluate(() => ({
+                  url: location.href,
+                  title: document.querySelector('#panel-title')?.textContent,
+                  buttons: [...document.querySelectorAll('button')].map(
+                    (button) => button.getAttribute('aria-label') ?? button.textContent,
+                  ),
+                })),
+          2000,
+          'Failure page diagnostics',
+        ).catch(() => ({ unavailable: true })),
       );
     }
     await fs.writeFile(
@@ -2125,22 +2176,44 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (!failureWatchdog) {
+    failureWatchdog = armFailureWatchdog();
+  }
+  let cleanupOk = true;
+  if (application) {
+    if (process.env.DOCK_TEST_FAILURE_CLEANUP === '1') {
+      let attempted = false;
+      cleanupOk = await closeTestApplication(
+        {
+          close: () => {
+            if (attempted) return application.close();
+            attempted = true;
+            return new Promise(() => {});
+          },
+          process: () => application.process(),
+        },
+        500,
+      );
+    } else cleanupOk = await closeTestApplication(application);
+  }
+  if (!cleanupOk) process.exitCode = 1;
   await fs.writeFile(
     path.join(output, packaged ? 'packaged-tests.json' : 'electron-tests.json'),
     JSON.stringify(
       {
         passed: !process.exitCode,
         checks: results,
+        cleanupOk,
         realChatGPT: 'Not tested; authenticated manual verification required.',
       },
       null,
       2,
     ),
   );
-  if (application) await application.close().catch(() => {});
   await fixture.close();
   await externalFixture.close();
   await fs
     .rm(directory, { recursive: true, force: true, maxRetries: 8, retryDelay: 300 })
     .catch(() => {});
+  if (cleanupOk) clearTimeout(failureWatchdog);
 }

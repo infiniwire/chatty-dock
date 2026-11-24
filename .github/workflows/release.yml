@@ -170,7 +170,7 @@ jobs:
           else
             printf '\nWindows packages are unsigned. Per-user silent updates are supported; OS trust policies still apply.\n' >> notes.md
           fi
-          printf '\nStartup automatic updates use public GitHub Releases and do not require a GitHub account. Older versions require one manual install to receive this change.\n' >> notes.md
+          printf '\nStartup automatic updates use public GitHub Releases and do not require a GitHub account. Versions before 0.3.6 require one manual install to receive this change.\n' >> notes.md
           printf '\nIndependent ChatGPT desktop wrapper. See README for login compatibility and manual verification limits.\n' >> notes.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" --draft=true

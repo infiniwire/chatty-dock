@@ -512,6 +512,28 @@ fixture`, rather than the new application shell. The test now identifies
   Existing clients need one manual installation; ad-hoc macOS builds still
   require manual updates. No additional publication is due on 2026-11-24.
 
+## 2026-11-24 — integration test failure handling
+
+- TEST-002, 0/10: the previous Apple Silicon run timed out waiting for window
+  web contents to be released, and failure handling did not terminate before
+  the 35-minute job timeout. The original assertion's cause remains unknown;
+  a same-commit retry passed and no product defect has been established.
+- The Electron harness now bounds failure diagnostics and application cleanup,
+  terminates only its own isolated Electron process if graceful shutdown hangs,
+  records cleanup failure, and uses a final watchdog. The window-release check
+  still requires the exact expected count, gives slow runners 15 seconds, and
+  logs window and web contents identities on failure. This improves diagnostics;
+  it does not claim to fix the original intermittent window assertion.
+- Regression: a real isolated Electron run deliberately encounters both a
+  hanging diagnostic and hanging graceful close. Before the bounded cleanup it
+  did not exit within 30 seconds; afterward it saved failure evidence and exited
+  nonzero. A disposable child-process check verifies forced termination.
+  Format, lint, TypeScript, 62 unit tests and 31 Electron integration checks
+  passed locally. Package and cross-platform release validation remain required.
+- The user explicitly requested immediate deployment after tests, superseding the
+  normal once-per-day release limit for this manual follow-up. Version 0.3.7 is
+  being prepared; do not mark it published before all release checks complete.
+
 ## Issue and backlog register
 
 | ID        | Score        | Status                                      | Fix commit            | Verification                                                               |
@@ -521,7 +543,7 @@ fixture`, rather than the new application shell. The test now identifies
 | TEST-001  | 0/10         | Test harness correction released in v0.3.5  | `4a9c2d7`, `2b1a06b`  | Prior CI failure; source, packaged and three-platform CI checks passed     |
 | SEC-001   | 8/10         | Mitigation released in v0.3.6               | `82f8a67`             | Advisory removed from audit; app, packaged and three-platform CI passed    |
 | UPD-004   | 9/10         | Correction released in v0.3.6               | `434aa4a`             | Anonymous provider and Windows installation upgrade passed                 |
-| TEST-002  | 0/10         | Intermittent failure; cause unconfirmed     | Not fixed             | Apple Silicon release test timed out; same-commit retry passed             |
+| TEST-002  | 0/10         | Cleanup hang mitigated; cause unconfirmed   | Pending               | Failure paths reproduced and bounded; original window assertion unresolved |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after

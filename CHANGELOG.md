@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7
+
+- Bound failure diagnostics and cleanup in Electron integration tests so a failed test cannot hold a release job until its overall timeout.
+- Record window and page identities when the closed-window cleanup check fails, and exercise stalled diagnostic and shutdown paths with isolated processes.
+
 ## 0.3.6
 
 - Check and download updates from public GitHub Releases without GitHub sign-in or an access token. Older clients require a one-time manual installation to obtain this change.
