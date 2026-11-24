@@ -6,7 +6,7 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 ## Current state
 
 - Repository: `infiniwire/chatty-dock`; working checkout: `D:\Github\chatty-dock`.
-- Release status: **v0.3.7 published**. On 2026-11-22, the user authorized normal
+- Release status: **v0.3.8 published**. On 2026-11-22, the user authorized normal
   pushes and releases whether the repository is public or private. Do not
   change repository visibility from this maintenance task.
 - Version policy: three-part `A.B.C`. A daily emergency or weekly maintenance
@@ -21,8 +21,8 @@ Monday through Sunday. Preserve previous entries when recording future runs.
 - UPD-004 and the SEC-001 mitigation were released in v0.3.6. The reported
   intermittent black screen still needs confirmation. TEST-002, an intermittent
   Apple Silicon integration timeout and cleanup hang, remains under investigation.
-- Latest stable release: [v0.3.7](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.7),
-  commit `5a21c3b5affb22b9b1f41d45a0ed5b7d526b065d`. Downloaded packages and
+- Latest stable release: [v0.3.8](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.8),
+  commit `fbd42cae423119d31941093f9b7cf06fd378caaf`. Downloaded packages and
   manifests passed checksum verification. Repository visibility is public.
 - Completed periods: November 2026 monthly and the November 16–22 and
   November 23–29 weekly cycles. No release job is in progress or failed.
@@ -549,12 +549,19 @@ fixture`, rather than the new application shell. The test now identifies
   after the change; full local source regression passed, as did the targeted
   packaged regression against the previously built 0.3.7 application. The
   original reason for the intermittent Electron call remains unconfirmed.
-  Version 0.3.8 is being prepared to deploy this follow-up after its checks.
+  Version 0.3.8 deploys this follow-up.
 - The freshly built 0.3.8 Windows executable could not be launched locally:
   Windows Device Guard explicitly blocked it. Three attempts failed before the
   application began; this is a local environment restriction (0/10), not a
   confirmed product defect. Do not disable or bypass the policy. The existing
-  release workflow must run the packaged Windows tests on its isolated runner.
+  release workflow ran and passed the packaged Windows tests on its isolated runner.
+- Candidate CI [run 45504284128](https://github.com/infiniwire/chatty-dock/actions/runs/45504284128)
+  passed for all platforms, and [release run 45505208431](https://github.com/infiniwire/chatty-dock/actions/runs/45505208431)
+  passed all platform builds, packaged checks and the Windows installation
+  upgrade test. Stable [v0.3.8](https://github.com/infiniwire/chatty-dock/releases/tag/v0.3.8)
+  is Latest and points to the expected commit. All five downloaded packages
+  and both update manifests matched SHA-256, and manifest versions and SHA-512
+  entries matched. Evidence: `artifacts/maintenance/public-update-20261124/release-v0.3.8-verification.json`.
 
 ## Issue and backlog register
 
@@ -565,7 +572,7 @@ fixture`, rather than the new application shell. The test now identifies
 | TEST-001  | 0/10         | Test harness correction released in v0.3.5  | `4a9c2d7`, `2b1a06b`  | Prior CI failure; source, packaged and three-platform CI checks passed     |
 | SEC-001   | 8/10         | Mitigation released in v0.3.6               | `82f8a67`             | Advisory removed from audit; app, packaged and three-platform CI passed    |
 | UPD-004   | 9/10         | Correction released in v0.3.6               | `434aa4a`             | Anonymous provider and Windows installation upgrade passed                 |
-| TEST-002  | 0/10         | Cleanup hang mitigated; cause unconfirmed   | Pending               | Failure paths reproduced and bounded; original window assertion unresolved |
+| TEST-002  | 0/10         | Hang safeguards released; cause unconfirmed | `5a21c3b`, `fbd42ca`  | Failure paths reproduced and bounded; original window assertion unresolved |
 
 Future newly confirmed product issues must record reproduction and evidence,
 impact and score rationale, root cause, fix, and failing-before/passing-after
