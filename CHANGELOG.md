@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Update Electron to block compromised eMudhra intermediates in Chromium and Node.js networking.
+
 ## 0.3.5
 
 - Make the startup recovery integration test select the intended application window when remote views are exposed to the test framework out of order.

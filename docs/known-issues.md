@@ -1,5 +1,27 @@
 # Known issues
 
+## SEC-001: Electron trusts compromised eMudhra intermediate certificates
+
+- Severity: 8/10. Electron's advisory describes a possible server impersonation
+  when an attacker has an affected certificate and can intercept the user's
+  connection. ChattyDock routinely connects to online services and could expose
+  sensitive session or page data under those conditions. The score reflects the
+  high impact and specific attack prerequisites; no actual attack was observed.
+- Evidence: the released app uses Electron 44.9.0, which falls in the affected
+  range in [GHSA-jr5w-w6x2-84p9](https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9).
+  On 2026-11-24, `npm audit` identified the advisory before the upgrade. Note
+  that Electron is a development dependency but supplies the shipped runtime;
+  `npm audit --omit=dev` alone cannot assess this exposure.
+- Root cause and mitigation: the shipped Chromium and Node.js TLS stacks lack
+  the upstream block for the compromised intermediates. The maintenance fix
+  updates Electron from 44.9.0 to 44.11.5, above the vendor's 44.9.1 fix.
+  This is an unreleased fix. No TLS verification is disabled or bypassed.
+- Verification: the post-upgrade dependency audit no longer lists this
+  advisory for Electron. Controlled application regression checks and packaged
+  verification are recorded in the maintenance log. An actual intercepted TLS
+  session using compromised certificates was not reproduced locally; the
+  certificate mitigation itself is based on the upstream security advisory.
+
 ## START-001: a stalled initial website request leaves an empty surface
 
 - Severity: 5/10. Affected windows can appear blank during an initial network stall, but the toolbar remains available and reloading can recover.
